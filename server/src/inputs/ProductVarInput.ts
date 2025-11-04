@@ -10,6 +10,9 @@ export class ProductVariationInput {
 
   @Field(() => Float)
   price!: number;
+
+  @Field(() => Float)
+  stock!: number;
 }
 
 @InputType()
@@ -22,4 +25,7 @@ export class UpdateProductVariations {
 
   @Field({nullable: true})
   price?: number;
+
+  @Field({nullable: true})
+  stock?: number;
 }

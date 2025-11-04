@@ -4,12 +4,11 @@ require("dotenv").config();
 import { MyContext } from "src/types";
 import { Resolver, InputType, Arg, Field, Ctx, Mutation, ObjectType, Query } from "type-graphql";
 import argon2 from "argon2";
-import { COOKIE_NAME } from "../constants";
-import Redis from "ioredis";
+import { redis } from "../utils/redis";
 import nodemailer from "nodemailer";
 import { FieldError } from "../shared/ferror";
 
-const redis = new Redis();
+const cookiename = process.env.COOKIE_NAME as string;
 
 const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -309,7 +308,7 @@ export class UserResolver {
     logout(@Ctx() { req, res }: MyContext) {
         return new Promise((resolve) =>
             req.session.destroy((err) => {
-                res.clearCookie(COOKIE_NAME);
+                res.clearCookie(cookiename);
                 res.clearCookie("user_location");
                 if (err) {
                     console.log(err);

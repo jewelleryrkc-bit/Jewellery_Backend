@@ -8,6 +8,7 @@
     "sourceMap": true,
     "outDir": "./dist",
     "moduleResolution": "node",
+    // "ignoreDeprecations": "6.0",
     "removeComments": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -30,5 +31,5 @@
     }
   },
   "exclude": ["node_modules"],
-  "include": ["./src/**/*.ts"]
+  "include": ["./src/**/*.ts", "old_migrations/Migration20250927055349.ts", "old_migrations/Migration20250922054923.ts"]
 }

@@ -36,6 +36,7 @@ export class ProductVariationResolver {
         @Arg("size") size: string,
         @Arg("color") color: string,
         @Arg("price") price: number,
+        @Arg("stock") stock: number,
         @Arg("productId") productId: string,
         @Ctx() { em }: MyContext
     ): Promise<ProductVariation> {
@@ -57,7 +58,8 @@ export class ProductVariationResolver {
             description: product.description,
             material: product.material,
             weight: product.weight,
-            slug
+            slug,
+            stock
         });
 
         await em.persistAndFlush(productVariation);
@@ -66,7 +68,7 @@ export class ProductVariationResolver {
 
     @Mutation(()=> ProductVariation)
     async updateProductVar(
-        @Arg("variationid") id: string,
+        @Arg("id") id: string,
         @Arg("input", () => UpdateProductVariations) input: UpdateProductVariations,
         @Ctx() { em,req }: MyContext
     ): Promise<ProductVariation> {

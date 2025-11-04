@@ -1,285 +1,427 @@
-// import { User } from "../entities/User";
+// import { Resolver, Query, Ctx, Arg, Mutation, Int, FieldResolver, Root } from "type-graphql";
+// import { MyContext } from "../types";
+// import { Product, ProductStatus } from "../entities/Products";
+// import { ProductInput, UpdateProductFields } from "../inputs/ProductInput";
+// import { Category } from "../entities/Category";
 // import { Company } from "../entities/Company";
-// require("dotenv").config();
-// import { MyContext } from "src/types";
-// import { Resolver, InputType, Arg, Field, Ctx, Mutation, ObjectType, Query } from "type-graphql";
-// import argon2 from "argon2";
-// import { COOKIE_NAME } from "../constants";
-// import Redis from "ioredis";
-// import nodemailer from "nodemailer";
-// import { FieldError } from "../shared/ferror";
+// import { ProductVariation } from "../entities/ProductVar";
+// import slugify from "slugify";
+// import { Review, ReviewSentiment } from "../entities/Reviews";
+// import { PaginatedProducts } from "../types/PaginatedProducts";
+// import { v4 as uuidv4 } from 'uuid';
+// import { getOrSetCache } from "../utils/cache";
 
-// const redis = new Redis();
+// @Resolver(() => Product)
+// export class ProductResolver {
 
-// const transporter = nodemailer.createTransport({
-//     service: "gmail",
-//     auth: {
-//         user: process.env.EMAIL_USER,
-//         pass: process.env.EMAIL_PASS,
-//     },
-// });
+//   @Query(() => Product, { nullable: true })
+//   async product(
+//     @Arg("id") id: string, 
+//     @Ctx() { em }: MyContext
+//   ): Promise<Product | null> {
 
-// // Type for location data
-// @ObjectType()
-// class LocationData {
-//     @Field(() => String, { nullable: true })
-//     ip?: string;
+//     const key = `product.id:${id}`;
+//     const index = `product:${id}`;
 
-//     @Field(() => String, { nullable: true })
-//     country?: string;
+//     return getOrSetCache (() => {
+//       return em.findOne(
+//         Product,
+//         { id, status: ProductStatus.ACTIVE },
+//         { populate: ['variations', 'category', 'reviews.user', 'company'] }
+//       );
+//     }, {
+//       key,
+//       ttl: 300,
+//       index,
+//       validate: (data) => !!data && !!data.id
+//     })
+//   }
 
-//     @Field(() => String, { nullable: true })
-//     city?: string;
+//   @Query(() => [Product])
+//   async myProducts(@Ctx() { em, req }: MyContext): Promise<Product[]> {
+//     if (!req.session.companyId) throw new Error("Not authenticated");
+//     return await em.find(Product, { company: req.session.companyId }, {
+//       populate: ['reviews', 'variations']
+//     });
+//   }
 
-//     @Field(() => String, { nullable: true })
-//     region?: string;
+//   @Query(() => Product, { nullable: true })
+//   async sellerProduct(
+//     @Arg("id") id: string,
+//     @Ctx() { em, req }: MyContext
+//   ): Promise<Product | null> {
+//     if (!req.session.companyId) throw new Error("Not authenticated");
 
-//     @Field(() => Number, { nullable: true })
-//     latitude?: number;
+//     return await em.findOne(Product, { id, company: req.session.companyId }, {
+//       populate: ['variations', 'category', 'reviews.user', 'company']
+//     });
+//   }
 
-//     @Field(() => Number, { nullable: true })
-//     longitude?: number;
-// }
+//   @Query(() => [Product])
+//   async getSimilarProducts(
+//     @Arg("category") category: string,
+//     @Arg("productId") productId: string,
+//     @Ctx() { em }: MyContext
+//   ): Promise<Product[]> {
+//     const categoryEntity = await em.findOne(Category, { name: category });
+//     if (!categoryEntity) throw new Error(`Category "${category}" not found.`);
 
-// @InputType()
-// class RegisterInput {
-//     @Field()
-//     username!: string;
-    
-//     @Field()
-//     email!: string;
-    
-//     @Field()
-//     password!: string;
-    
-//     @Field()
-//     contact!: number;
-// }
+//     return await em.find(Product, {
+//       category: categoryEntity.id,
+//       id: { $ne: productId },
+//       status: ProductStatus.ACTIVE // ✅
+//     });
+//   }
 
-// @InputType()
-// class LoginInput {
-//     @Field()
-//     username!: string;
+//   @Query(() => [Product])
+//   async allProductsforadmin(
+//     @Ctx() { em }: MyContext,
+//     @Arg("category", { nullable: true }) categoryId?: string,
+//     @Arg("sentiment", () => ReviewSentiment, { nullable: true }) sentiment?: ReviewSentiment,
+//     @Arg("minPrice", { nullable: true }) minPrice?: number,
+//     @Arg("maxPrice", { nullable: true }) maxPrice?: number,
+//     @Arg("material", { nullable: true }) material?: string
+//   ): Promise<Product[]> {
+//     const filters: any = {}; // ✅  
 
-//     @Field()
-//     password!: string;
-
-//     @Field()
-//     email!: string;
-// }
-
-// @InputType()
-// class VerifyCodeInput {
-//     @Field()
-//     email!: string;
-    
-//     @Field()
-//     code!: string;
-// }
-
-// @ObjectType()
-// class UserResponse {
-//     @Field(() => [FieldError], { nullable: true })
-//     errors?: FieldError[];
-
-//     @Field(() => User, { nullable: true })
-//     user?: User;
-
-//     @Field(() => LocationData, { nullable: true })
-//     location?: LocationData;
-// }
-
-// // Helper function to get client IP
-// function getClientIp(req: any): string {
-//     const forwarded = req.headers['x-forwarded-for'];
-//     if (typeof forwarded === 'string') {
-//         return forwarded.split(',')[0].trim();
+//     if (categoryId) filters.category = categoryId;
+//     if (minPrice || maxPrice) {
+//       filters.price = {};
+//       if (minPrice) filters.price["$gte"] = minPrice;
+//       if (maxPrice) filters.price["$lte"] = maxPrice;
 //     }
-//     return req.socket.remoteAddress || '';
-// }
-
-// // Helper function to fetch location data
-// async function getLocationFromIp(ip: string): Promise<LocationData> {
-//     if (ip === '::1' || ip === '127.0.0.1') {
-//         return {
-//             ip,
-//             country: 'Localhost',
-//             city: 'Development'
-//         };
+//     if (material) filters.material = material;
+//     if (sentiment) {
+//       // Filter products that have at least one review with the specified sentiment
+//       filters.reviews = { sentiment };
 //     }
 
-//     try {
-//         // Using ip-api.com
-//         const response = await fetch(`https://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,lat,lon,query`);
-//         const data = await response.json();
+//     return await em.find(Product, filters, { populate: ["reviews","variations", "category"] });
+//   }
 
-//         if (data.status !== 'success') {
-//             throw new Error(data.message || 'Failed to fetch location');
-//         }
+//   @Query(() => [Product])
+//   async allProducts(
+//     @Ctx() { em }: MyContext,
+//     @Arg("category", { nullable: true }) categoryId?: string,
+//     @Arg("minPrice", { nullable: true }) minPrice?: number,
+//     @Arg("maxPrice", { nullable: true }) maxPrice?: number,
+//     @Arg("material", { nullable: true }) material?: string
+//   ): Promise<Product[]> {
+//     const filters: any = { status: ProductStatus.ACTIVE }; // ✅
 
-//         return {
-//             ip: data.query,
-//             country: data.country,
-//             city: data.city,
-//             region: data.regionName,
-//             latitude: data.lat,
-//             longitude: data.lon
-//         };
-//     } catch (error) {
-//         console.error('Location fetch error:', error);
-//         return {
-//             ip,
-//             country: 'Unknown',
-//             city: 'Unknown'
-//         };
+//     if (categoryId) filters.category = categoryId;
+//     if (minPrice || maxPrice) {
+//       filters.price = {};
+//       if (minPrice) filters.price["$gte"] = minPrice;
+//       if (maxPrice) filters.price["$lte"] = maxPrice;
 //     }
-// }
+//     if (material) filters.material = material;
 
-// @Resolver()
-// export class UserResolver {
-//     @Query(() => User, { nullable: true })
-//     async me(@Ctx() { req, em }: MyContext) {
-//         if (!req.session.userId) {
-//             return null;
-//         }
-//         return await em.findOne(User, { id: req.session.userId as string });
-//     }
+//     return await em.find(Product, filters, { populate: ["variations", "category"] });
+//   }
 
-//     @Mutation(() => UserResponse)
-//     async register(
-//         @Arg("options") options: RegisterInput,
-//         @Ctx() { em }: MyContext
-//     ): Promise<UserResponse> {
-//         const existingSeller = await em.findOne(Company, { email: options.email });
-//         const existingUser = await em.findOne(User, { username: options.username });
-        
-//         if (existingUser) {
-//             return { errors: [{ field: "username", message: "Username already taken" }] };
-//         }
-//         if (existingSeller) {
-//             return { errors: [{ field: "email", message: "Email is already registered as a seller." }] };
-//         }
-//         if (options.username.length <= 3) {
-//             return { errors: [{ field: "username", message: "Username is too short" }] };
-//         }
-//         if (options.password.length <= 5) {
-//             return { errors: [{ field: "password", message: "Password is too short" }] };
-//         }
+//   @Query(() => [Product])
+//   async getMaterials(
+//     @Ctx() { em }: MyContext,
+//     @Arg("material", { nullable: true }) material?: string
+//   ): Promise<Product[]> {
+//     const filters: any = { status: ProductStatus.ACTIVE }; // ✅
+//     if (material) filters.material = material;
+//     return em.find(Product, filters, { populate: ["variations"] });
+//   }
 
-//         const hashedPassword = await argon2.hash(options.password);
-//         const user = em.create(User, {  
-//             username: options.username,
-//             password: hashedPassword,
-//             contact: options.contact,
-//             email: options.email,
-//             isEmailVerified: false,
-//             isPhoneVerified: false,
-//             createdAt: new Date(),
-//             updatedAt: new Date(),
-//         });
-//         await em.persistAndFlush(user);
+//   @Query(() => [Product])
+//     async filteredProducts(
+//       @Arg("search", { nullable: true }) search: string,
+//       @Arg("category", { nullable: true }) categoryId: string,
+//       @Arg("material", { nullable: true }) material: string,
+//       @Arg("minRating", { nullable: true }) minRating: number,
+//       @Arg("maxRating", { nullable: true }) maxRating: number,
+//       @Arg("minPrice", { nullable: true }) minPrice: number,
+//       @Arg("maxPrice", { nullable: true }) maxPrice: number,
+//       @Ctx() { em }: MyContext
+//     ): Promise<Product[]> {
+//       const filters: any = {
+//         status: ProductStatus.ACTIVE,
+//         ...(search && { name: { $ilike: `%${search}%` } }),
+//         ...(categoryId && { category: categoryId }),
+//         ...(material && { material }),
+//         ...((minPrice !== undefined || maxPrice !== undefined) && {
+//           price: {
+//             ...(minPrice !== undefined && { $gte: minPrice }),
+//             ...(maxPrice !== undefined && { $lte: maxPrice }),
+//           },
+//         }),
+//         ...((minRating !== undefined || maxRating !== undefined) && {
+//           averageRating: {
+//             ...(minRating !== undefined && { $gte: minRating }),
+//             ...(maxRating !== undefined && { $lte: maxRating }),
+//           },
+//         }),
+//       };
 
-//         const emailCode = Math.floor(100000 + Math.random() * 900000).toString();
-//         await redis.set(`emailCode:${user.email}`, emailCode, "EX", 600);
-
-//         await transporter.sendMail({
-//             from: process.env.EMAIL_USER,
-//             to: user.email,
-//             subject: "Verify Your Email",
-//             text: `Your verification code is: ${emailCode}`,
-//         });
-
-//         return { user };
+//       return await em.find(Product, filters, {
+//         populate: ["category"],
+//         orderBy: { averageRating: "DESC" },
+//       });
 //     }
 
-//     @Mutation(() => UserResponse)
-//     async verifyCode(
-//         @Arg("input") input: VerifyCodeInput,
-//         @Ctx() { em }: MyContext
-//     ): Promise<UserResponse> {
-//         const user = await em.findOne(User, { email: input.email });
+//   @Query(() => [Product])
+//   async topRatedProducts(
+//     @Arg("limit", () => Int, { defaultValue: 5 }) limit: number,
+//     @Ctx() { em }: MyContext
+//   ): Promise<Product[]> {
 
-//         if (!user) {
-//             return { errors: [{ field: "email", message: "User not found" }] };
+//     const key = `product:top-rated:${limit}`;
+//     return getOrSetCache(() => {
+//       return em.find(
+//         Product,
+//         { status: ProductStatus.ACTIVE }, // ✅
+//         {
+//           orderBy: { averageRating: "DESC" },
+//           limit,
+//           populate: ["reviews", "variations","category"]
 //         }
+//       );
+//     }, {
+//       key,
+//       ttl: 300,
+//       index: 'product:top-rated'
+//     });
+//   }
 
-//         const storedEmailCode = await redis.get(`emailCode:${input.email}`);
+//   @Mutation(() => Product)
+//   async createProduct(
+//     @Arg("input", () => ProductInput) input: ProductInput,
+//     @Ctx() { em, req }: MyContext
+//   ): Promise<Product> {
+//     if (!req.session.companyId) throw new Error("Not authenticated");
 
-//         if (!storedEmailCode || input.code !== storedEmailCode) {
-//             return { errors: [{ field: "code", message: "Invalid or expired verification code" }] };
-//         }
+//     const company = await em.findOne(Company, { id: req.session.companyId });
+//     if (!company) throw new Error("Company not found");
 
-//         user.isEmailVerified = true;
-//         await em.persistAndFlush(user);
+//     const category = await em.findOne(Category, { id: input.category });
+//     if (!category) throw new Error("Category not found");
 
-//         await redis.del(`emailCode:${input.email}`);
+//     const baseSlug = slugify(input.name, { lower: true, strict: true });
+//     const uuidSuffix = uuidv4().split("-")[0];
+//     const finalSlug = `${baseSlug}-${uuidSuffix}`;
 
-//         return { user };
-//     }
+//     const product = em.create(Product, {
+//       ...input,
+//       category,
+//       company,
+//       slug: finalSlug,
+//       averageRating: 0,
+//       reviewCount: 0,
+//       variations: [],
+//       createdAt: new Date(),
+//       updatedAt: new Date(),
+//       status: ProductStatus.ACTIVE // ✅
+//       ,
+//       views: 0
+//     });
 
-//     @Mutation(() => UserResponse)
-//     async login(
-//         @Arg("options") options: LoginInput,
-//         @Ctx() { em, req, res }: MyContext
-//     ): Promise<UserResponse> {
-//         const user = await em.findOne(User, { username: options.username });
+//     await em.persistAndFlush(product);
 
-//         if (!user) {
-//             return { errors: [{ field: "username", message: "Username doesn't exist" }] };
-//         }
-
-//         if (user.email !== options.email) {
-//             return { errors: [{ field: "email", message: "Invalid Email" }] };
-//         }
-
-//         if (!user.isEmailVerified) {
-//             return { errors: [{ field: "verification", message: "User not verified" }] };
-//         }
-
-//         const valid = await argon2.verify(user.password, options.password);
-//         if (!valid) {
-//             return { errors: [{ field: "password", message: "Incorrect password" }] };
-//         }
-
-//         // Get client IP and location
-//         const ip = getClientIp(req);
-//         const location = await getLocationFromIp(ip);
-
-//         // Set location cookie
-//         res.cookie("user_location", JSON.stringify(location), {
-//             httpOnly: false,
-//             sameSite: "lax",
-//             secure: process.env.NODE_ENV === "production",
-//             maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-//         });
-
-//         // Save session
-//         req.session.userId = user.id;
-
-//         return { 
-//             user,
-//             location 
-//         };
-//     }
-
-//     @Query(() => [User])
-//     async users(@Ctx() { em }: MyContext): Promise<User[]> {
-//         return em.find(User, {});
-//     }
-
-//     @Mutation(() => Boolean)
-//     logout(@Ctx() { req, res }: MyContext) {
-//         return new Promise((resolve) =>
-//             req.session.destroy((err) => {
-//                 res.clearCookie(COOKIE_NAME);
-//                 res.clearCookie("user_location");
-//                 if (err) {
-//                     console.log(err);
-//                     resolve(false);
-//                     return;
-//                 }
-//                 resolve(true);
-//             })
+//     if (input.variations) {
+//       for (const variationInput of input.variations) {
+//         const variationSlug = slugify(
+//           `${product.slug}-${variationInput.size}-${variationInput.color}-${uuidv4().split("-")[0]}`,
+//           { lower: true, strict: true }
 //         );
+
+//         const variation = em.create(ProductVariation, {
+//           ...variationInput,
+//           product,
+//           createdAt: new Date(),
+//           updatedAt: new Date(),
+//           productId: product.id,
+//           slug: variationSlug,
+//           name: product.name,
+//           description: product.description,
+//           material: product.material,
+//         });
+
+//         await em.persistAndFlush(variation);
+//       }
 //     }
+
+//     return product;
+//   }
+
+//   @Mutation(() => Product)
+//   async updateProducts(
+//     @Arg("id") id: string,
+//     @Arg("input", () => UpdateProductFields) input: UpdateProductFields,
+//     @Ctx() { em, req }: MyContext
+//   ): Promise<Product> {
+//     if (!req.session.companyId) throw new Error("Not authenticated");
+
+//     const product = await em.findOne(Product, { id }, { populate: ['variations'] });
+//     if (!product) throw new Error("Product not found");
+
+//     if (input.name && input.name !== product.name) {
+//       const baseSlug = slugify(input.name, { lower: true, strict: true });
+//       const uuidSuffix = uuidv4().split("-")[0];
+//       product.slug = `${baseSlug}-${uuidSuffix}`;
+
+//       for (const variation of product.variations) {
+//         const variationSuffix = uuidv4().split("-")[0];
+//         variation.slug = slugify(
+//           `${product.slug}-${variation.size}-${variation.color}-${variationSuffix}`,
+//           { lower: true, strict: true }
+//         );
+//         variation.name = input.name;
+//       }
+//     }
+
+//     em.assign(product, input);
+//     await em.persistAndFlush(product);
+
+//     return product;
+//   }
+
+//   @Mutation(() => Product)
+//   async deleteProduct(@Arg("id") id: string, @Ctx() { em }: MyContext): Promise<Product> {
+//     const product = await em.findOne(Product, { id });
+//     if (!product) throw new Error("Product not found");
+//     await em.removeAndFlush(product);
+//     return product;
+//   }
+
+//   @Mutation(() => Boolean)
+//   async toggleProductStatus(
+//     @Arg("productId") productId: string,
+//     @Arg("status", () => ProductStatus) status: ProductStatus,
+//     @Ctx() { em }: MyContext
+//   ): Promise<boolean> {
+//     const product = await em.findOne(Product, { id: productId });
+//     if (!product) throw new Error("Product not found");
+//     product.status = status;
+//     await em.flush();
+//     return true;
+//   }
+
+//   @FieldResolver(() => [Review])
+//   async reviews(@Root() product: Product, @Ctx() { em }: MyContext) {
+//     await em.populate(product, ["reviews"]);
+//     return product.reviews;
+//   }
+
+//   @Query(() => Product, { nullable: true })
+//     async productBySlug(
+//       @Arg("slug") slug: string,
+//       @Ctx() { em }: MyContext
+//     ): Promise<Product | null> {
+//       console.log(`🔍 [RESOLVER] ProductBySlug called with slug: ${slug}`);
+    
+//       const key = `product:slug:${slug}`;
+//       const index = `product:${slug}`;
+    
+//       return getOrSetCache(() => {
+//         console.log(`📦 [RESOLVER] Fetching product from DB for slug: ${slug}`);
+    
+//         return em.findOne(
+//           Product,
+//           { slug, status: ProductStatus.ACTIVE },
+//           { populate: ['variations', 'category', 'company','reviews.user'] }
+//         );
+//       }, {
+//         key,
+//         ttl: 300,
+//         index,
+//         validate: (data) => !!data && !!data.id, // make sure it's not null and has ID
+//       });
+//     }
+  
+
+//     // @Query(() => Product, { nullable: true })
+//     //   async productBySlug(@Arg("slug") slug: string, @Ctx() { em }: MyContext): Promise<Product | null> {
+//     //     return await em.findOne(
+//     //       Product,
+//     //       { slug, status: ProductStatus.ACTIVE }, // ✅
+//     //       { populate: ["variations", "category", 'reviews.user', 'company.cname'] }
+//     //     );
+//     //   }  
+
+//   @Query(() => [Product])
+//   async productsByCategory(
+//     @Arg("name") name: string,
+//     @Ctx() { em }: MyContext
+//   ): Promise<Product[]> {
+//     const key = `product:ByCategory:${name}`;
+//     const category = await em.findOne(Category, { name });
+    
+//     if (!category) throw new Error("Category not found");
+//     return getOrSetCache(() => {
+//       return em.find(
+//         Product,
+//         { category: category.id, status: ProductStatus.ACTIVE }, // ✅
+//         { populate: ["variations", "category"] }
+//       );
+//     }, {
+//       key,
+//       ttl: 300,
+//       index: 'products:ByCategory'
+//     }) 
+//     }
+
+//   @Query(() => PaginatedProducts)
+//   async paginatedProducts(
+//     @Ctx() { em }: MyContext,
+//     @Arg("limit", () => Int) limit: number,
+//     @Arg("cursor", { nullable: true }) cursor?: string
+//   ): Promise<PaginatedProducts> {
+
+
+//     const realLimit = Math.min(50, limit);
+//     const fetchLimit = realLimit + 1;
+
+//     const filters: any = { status: ProductStatus.ACTIVE }; // ✅
+//     if (cursor) filters.createdAt = { $lt: new Date(parseInt(cursor)) };
+
+//     const products = await em.find(Product, filters, {
+//       orderBy: { createdAt: "DESC" },
+//       limit: fetchLimit,
+//       populate: ["category", "variations", "reviews"]
+//     });
+
+//     const hasMore = products.length === fetchLimit;
+//     const trimmed = products.slice(0, realLimit);
+
+//     return {
+//       products: trimmed,
+//       hasMore,
+//       nextCursor: hasMore
+//         ? String(new Date(trimmed[trimmed.length - 1].createdAt).getTime())
+//         : null,
+//     };
+//   }
+
+//   @Query(() => PaginatedProducts)
+//   async paginatedMyProducts(
+//     @Ctx() { em, req }: MyContext,
+//     @Arg("offset", () => Int, { defaultValue: 0 }) offset: number,
+//     @Arg("limit", () => Int, { defaultValue: 10 }) limit: number
+//   ): Promise<PaginatedProducts> {
+//     if (!req.session.companyId) throw new Error("Not authenticated");
+
+//     const realLimit = Math.min(50, limit);
+
+//     const [products, total] = await Promise.all([
+//       em.find(Product, { company: req.session.companyId }, {
+//         offset,
+//         limit: realLimit,
+//         orderBy: { createdAt: "DESC" },
+//         populate: ["category", "variations", "reviews"],
+//       }),
+//       em.count(Product, { company: req.session.companyId })
+//     ]);
+
+//     return {
+//       products,
+//       total,
+//     };
+//   }
 // }

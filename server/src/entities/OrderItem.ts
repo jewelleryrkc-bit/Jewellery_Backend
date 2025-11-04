@@ -4,6 +4,7 @@ import { Field, ID, ObjectType } from "type-graphql";
 import { Order } from "./Order";
 import { Product } from "./Products";
 import { ProductVariation } from "./ProductVar";
+import { User } from "./User";
 
 @ObjectType()
 @Entity()
@@ -19,6 +20,10 @@ export class OrderItem {
   @Field(() => ProductVariation, { nullable: true })
   @ManyToOne(() => ProductVariation, { nullable: true })
   variation?: ProductVariation;
+
+  @Field(()=> User, {nullable: true})
+  @ManyToOne(()=> User, {nullable:true})
+  user!: User;
 
   @Field(() => Number)
   @Property({ type: "integer" })

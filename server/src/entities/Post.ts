@@ -8,7 +8,11 @@ export class Post {
   @PrimaryKey()
   id!: number;
 
-  @Field(()=> String)
+  @Field(() => String)
   @Property()
   title!: string;
+
+  @Field(() => String, { nullable: true })
+  @Property({ nullable: true })
+  imageUrl?: string;
 }

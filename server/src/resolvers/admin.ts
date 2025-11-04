@@ -12,13 +12,14 @@ import {
   import { FieldError } from "../shared/ferror";
   import { COOKIE_NAME } from "../constants";
   import { Admin } from "../entities/Admin";
-  import Redis from "ioredis";
+  // import Redis from "ioredis";
+  import { redis } from "../utils/redis";
   import argon2 from "argon2";
   import nodemailer from "nodemailer";
   
   require("dotenv").config();
   
-  const redis = new Redis();
+  // const redis = new Redis();
   
   const transporter = nodemailer.createTransport({
     service: "gmail",

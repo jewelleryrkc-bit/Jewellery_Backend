@@ -1,58 +1,49 @@
-import { Resolver, Query, Ctx, Int, Arg, Mutation } from "type-graphql";
+import { Resolver, Mutation, Arg, Ctx } from "type-graphql";
 import { Post } from "../entities/Post";
 import { MyContext } from "../types";
+import fs from "fs";
+import path from "path";
 
-@Resolver()
+// Storage adapter interface (for future S3 switch)
+interface StorageAdapter {
+  saveFile(filename: string, buffer: Buffer, contentType: string): Promise<string>;
+}
+
+// Local storage implementation
+class LocalStorage implements StorageAdapter {
+  async saveFile(filename: string, buffer: Buffer, _p0: string) {
+    const uploadDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    const filePath = path.join(uploadDir, filename);
+    fs.writeFileSync(filePath, buffer);
+    return `/uploads/${filename}`; // URL for frontend
+  }
+}
+
+const storage = new LocalStorage();
+
+@Resolver(Post)
 export class PostResolver {
-    @Query(()=> [Post])
-    posts(@Ctx() { em }: MyContext ): Promise<Post[]>{
-        return em.find(Post, {});
-    }
 
-    @Query(() => Post, { nullable: true })
-    post(
-        @Arg("id", () => Int) id: number,
-        @Ctx() { em }: MyContext 
-    ): Promise<Post | null> {
-        return em.findOne(Post, { id });
-    }
+  @Mutation(() => Post)
+  async createPostWithBase64(
+    @Arg("title") title: string,
+    @Arg("fileBase64") fileBase64: string,
+    @Ctx() { em }: MyContext
+  ): Promise<Post> {
+    // Strip data:image/jpeg;base64, prefix if present
+    const base64Data = fileBase64.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
 
-    @Mutation(() => Post)
-    async createPost(
-        @Arg("title") title: string,
-        @Ctx() { em }: MyContext 
-    ): Promise<Post> {
-        const post = em.create(Post, {
-            title
-        });
-        await em.persistAndFlush(post);
-        return post;
-    }
+    const filename = `${Date.now()}.jpg`;
 
-    @Mutation(() => Post, {nullable: true})
-    async updatePost(
-        @Arg("id") id: number,
-        @Arg("title", ()=> String , {nullable: true}) title: string,
-        @Ctx() { em }: MyContext 
-    ): Promise<Post | null> {
-        const post = await em.findOne(Post, { id });
-        if (!post) {
-            return null;
-        }
-        if (typeof title !== "undefined"){
-            post.title = title;
-            await em.persistAndFlush(post);
-        }
-        return post;
-    }
+    // Save file locally
+    const imageUrl = await storage.saveFile(filename, buffer, "image/jpeg");
 
-    @Mutation(()=> Boolean)
-    async deletePost (
-        @Arg("id") id: number,
-        @Ctx() {em}: MyContext
-    ): Promise<boolean> {
-        await em.nativeDelete(Post,{id})
-        return true;
-    }
+    // Save metadata in DB
+    const post = em.create(Post, { title, imageUrl });
+    await em.persistAndFlush(post);
 
-    }
+    return post;
+  }
+}

@@ -1,4 +1,4 @@
-import { Entity, PrimaryKey, Property, ManyToOne } from "@mikro-orm/core";
+import { Entity, PrimaryKey, Property, ManyToOne, Index } from "@mikro-orm/core";
 import { User } from "./User";
 import { Field, ID, Int, ObjectType, registerEnumType } from "type-graphql";
 import { Product } from "./Products";
@@ -10,9 +10,9 @@ export class Review {
   @PrimaryKey({ type: "uuid" })
   id: string = crypto.randomUUID();
 
-  @Field(() => User)
-  @ManyToOne(() => User)
-  user!: User;
+  @Field(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true })
+  user?: User;
 
   // @Property({nullable: true, hidden: true})
   // limit?: number;
@@ -21,10 +21,12 @@ export class Review {
   @Property({ type: 'integer[]', nullable: true })
   ratingDistribution?: number[]; // [count1Star, count2Star, count3Star, count4Star, count5Star]
 
+  @Index()
   @Field(() => Product) // Link to Product, not Company
-  @ManyToOne(() => Product)
+  @ManyToOne(() => Product, {nullable: true})
   product!: Product; // Changed from Company to Product
 
+  @Index()
   @Field(() => ReviewSentiment)
   @Property({ type: "string"})
   sentiment?: ReviewSentiment; // Add this field

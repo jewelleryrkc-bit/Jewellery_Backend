@@ -21,6 +21,10 @@ export class ProductVariation {
   @Property({ type: "decimal" })
   price!: number;
 
+  @Field()
+  @Property({ type: "decimal" })
+  stock!: number;
+
   @Field(() => Product)
   @ManyToOne(() => Product)
   product!: Product;

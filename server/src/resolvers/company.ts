@@ -1,15 +1,17 @@
 // import { EntityManager } from "@mikro-orm/core";
-import { Resolver, InputType, Arg, Field, Ctx, Mutation, ObjectType, Query } from "type-graphql";
+import { Resolver, InputType, Arg, Field, Ctx, Mutation, ObjectType, Query, Int } from "type-graphql";
 import argon2 from "argon2";
-import { Company } from "../entities/Company";
-import Redis from "ioredis";
+require("dotenv").config();
+import { Company, CompanyStatus } from "../entities/Company";
+// import Redis from "ioredis";
+import { redis } from "../utils/redis";
 import nodemailer from "nodemailer";
 import { MyContext } from "src/types";
 import { COOKIE_NAME } from "../constants";
 import { FieldError } from "../shared/ferror";
 import { User } from "../entities/User";
 
-const redis = new Redis();
+// const redis = new Redis();
 
 const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -18,6 +20,15 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS,
     },
 });
+
+@InputType()
+class UpdateSMTPInput {
+  @Field()
+  email!: string; // seller’s email used for SMTP
+
+  @Field()
+  smtpPassword!: string; // app password
+}
 
 @InputType()
 class RegisterCompanyInput {
@@ -38,6 +49,18 @@ class RegisterCompanyInput {
     
     @Field()
     contact!: number;
+}
+
+@InputType()
+class UpdateCompanyInput {
+    @Field({nullable: true})
+    username?:  string;
+
+    @Field({nullable: true})
+    email?: string;
+
+    @Field({nullable: true})
+    contact?: number;
 }
 
 @InputType()
@@ -78,8 +101,35 @@ export class CompanyResolver {
         if (!req.session.companyId) {
             return null;
         }
-        return await em.findOne(Company, { id: req.session.companyId as string }, { populate: ["products"]});
+        return await em.findOne(Company, { id: req.session.companyId as string }, { populate: ["products","reviews",'products.variations']});
     }
+
+    @Mutation(() => Company)
+        async updateSMTP(
+        @Arg("input") input: UpdateSMTPInput,
+        @Ctx() { em, req }: MyContext
+        ): Promise<Company> {
+        if (!req.session.companyId) {
+            throw new Error("Not authenticated");
+        }
+
+        const company = await em.findOne(Company, { id: req.session.companyId });
+        if (!company) {
+            throw new Error("Company not found");
+        }
+
+        // Ensure seller email matches
+        if (company.email !== input.email) {
+            throw new Error("Email does not match company account");
+        }
+
+        // Save SMTP password (⚠️ should be encrypted in production, not plain)
+        company.smtpPassword = input.smtpPassword;
+        await em.flush();
+
+        return company;
+        }
+
 
     @Mutation(() => CompanyResponse)
     async registerCompany(
@@ -110,6 +160,8 @@ export class CompanyResolver {
             updatedAt: new Date(),
             username: options.username,
             products: "",
+            status: CompanyStatus.ACTIVE,
+            profileViews: 0
         });
         await em.persistAndFlush(company);
 
@@ -126,6 +178,37 @@ export class CompanyResolver {
         });
 
         return { company };
+    }
+
+    @Mutation(()=> Company)
+    async updateCompanyfields(
+        @Arg("companyid") id: string,
+        @Arg("input", () => UpdateCompanyInput) input: UpdateCompanyInput,
+        @Ctx() { em, req }: MyContext
+    ): Promise<Company> {
+        if(!req.session.companyId) {
+            throw new Error("Not authenticated");
+        }
+        const company = await em.findOne(Company, { id });
+        if (!company) {
+            throw new Error("Company not found");
+        }
+        em.assign(company, input);
+        await em.flush()
+
+        return company;
+    }
+
+    @Mutation(()=> Company)
+    async deleteCompany(
+        @Arg("id") id: string,
+        @Ctx() { em }: MyContext
+    ): Promise<Company> {
+        const company =await em.findOne(Company, { id } );
+        if (!company) throw new Error("Company not found");
+
+        await em.removeAndFlush(company);
+        return company;
     }
 
     @Mutation(() => CompanyResponse)
@@ -210,6 +293,99 @@ export class CompanyResolver {
 
     @Query(() => [Company])
     async getCompanies(@Ctx() { em }: MyContext): Promise<Company[]> {
-        return em.find(Company, {}, {populate: ['products']});
+        return em.find(Company, {}, {populate: ['products','reviews']});
     }
+
+    @Query(() => Company)
+    async getCompany(
+        @Arg("id") id: string,
+        @Ctx() { em }: 
+        MyContext): Promise<Company> {
+        const company = await em.findOne(Company, { id }, {populate: ['products', 'products.reviews','reviews', 'reviews.user']});
+        if(!company) {
+            throw new Error("Company not found");
+        };
+        
+        return company
+    }
+
+    // Add to your CompanyResolver.ts
+        @Mutation(() => Boolean)
+        async trackCompanyView(
+        @Arg("companyId") companyId: string,
+        @Ctx() { em, req }: MyContext
+        ): Promise<boolean> {
+        try {
+            const company = await em.findOne(Company, { id: companyId });
+            if (!company) {
+            throw new Error("Company not found");
+            }
+
+            // Increment view count
+            company.profileViews = (company.profileViews || 0) + 1;
+            company.lastViewedAt = new Date();
+
+            // Store recent viewer (optional)
+            if (req.session.userId) {
+            if (!company.recentViewerIds) {
+                company.recentViewerIds = [];
+            }
+            // Add user ID to recent viewers (limit to last 10)
+            company.recentViewerIds = [
+                req.session.userId,
+                ...(company.recentViewerIds || []).filter(id => id !== req.session.userId)
+            ].slice(0, 10);
+            }
+
+            await em.persistAndFlush(company);
+            return true;
+        } catch (error) {
+            console.error("Error tracking company view:", error);
+            return false;
+        }
+    }
+
+        @Query(() => Int)
+         async getCompanyProfileViews(
+            @Arg("companyId") companyId: string,
+            @Ctx() { em, req }: MyContext
+            ): Promise<number> {
+            // Only company owners can view their stats
+            const company = await em.findOne(Company, { id: companyId });
+            if (!company) {
+                throw new Error("Company not found");
+            }
+
+            if (req.session.companyId !== companyId) {
+                throw new Error("Unauthorized: Only company owner can view stats");
+            }
+
+            return company.profileViews || 0;
+        }
+
+    @Query(() => [User], { nullable: true })
+      async getRecentCompanyViewers(
+        @Arg("companyId") companyId: string,
+        @Ctx() { em, req }: MyContext
+         ): Promise<User[] | null> {
+        const company = await em.findOne(Company, { id: companyId }, { populate: ['recentViewerIds'] });
+        if (!company) {
+            throw new Error("Company not found");
+        }
+
+        if (req.session.companyId !== companyId) {
+            throw new Error("Unauthorized: Only company owner can view visitors");
+        }
+
+        if (!company.recentViewerIds || company.recentViewerIds.length === 0) {
+            return null;
+        }
+
+        // Fetch user details for recent viewers
+        const users = await em.find(User, { 
+            id: { $in: company.recentViewerIds } 
+        });
+
+        return users;
+        }
 }

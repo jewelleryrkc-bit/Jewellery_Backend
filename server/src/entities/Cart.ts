@@ -3,6 +3,7 @@ import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from "
 import { Field, ID, ObjectType } from "type-graphql";
 import { User } from "./User";
 import { CartItem } from "./CartItem";
+import { DiscountCoupon } from "./DiscountCoupon";
 
 @ObjectType()
 @Entity()
@@ -27,10 +28,22 @@ export class Cart {
   @Property({ onUpdate: () => new Date() })
   updatedAt: Date = new Date();
 
+  @Field(() => DiscountCoupon, { nullable: true })
+  @ManyToOne(() => DiscountCoupon, { nullable: true })
+  discountCoupon?: DiscountCoupon;
+
+  @Field(() => Number, { nullable: true })
+  @Property({ nullable: true })
+  discountAmount?: number;
+
+  @Field(() => Number)
+  get subtotal(): number {
+    return this.items.getItems().reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  }
+
   @Field(() => Number)
   get total(): number {
-    return this.items.getItems().reduce((sum, item) => {
-      return sum + (item.price * item.quantity);
-    }, 0);
+    const subtotal = this.subtotal;
+    return this.discountAmount ? subtotal - (subtotal * (this.discountAmount / 100)) : subtotal;
   }
 }
