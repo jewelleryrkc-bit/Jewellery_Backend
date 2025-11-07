@@ -1,0 +1,50 @@
+# version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+    container_name: server
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env   
+    environment:
+      # NODE_ENV: development
+      PORT: 4000 
+
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: rkcdb
+
+      # REDIS_HOST: redis
+      # REDIS_PORT: 6379
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:16
+    container_name: server-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rkcdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: server-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:

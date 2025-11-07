@@ -1,0 +1,37 @@
+# Ignore dependencies and build artifacts
+node_modules
+dist
+build
+.cache
+.next
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment & configs
+.env
+.env.local
+.env.*.local
+
+# Git files
+.git
+.gitignore
+
+# Docker files (we don’t need to copy these into the image)
+Dockerfile*
+docker-compose*
+
+# Editor & OS files
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Tests (optional — speeds up build if you don’t need tests inside container)
+__tests__/
+*.test.ts
+*.spec.ts
+coverage/
