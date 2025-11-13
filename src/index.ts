@@ -1,6 +1,6 @@
 import express, { RequestHandler } from "express";
 require("dotenv").config();
-import bodyParser from "body-parser";
+// import bodyParser from "body-parser";
 import "reflect-metadata";
 import session from "express-session";
 import mikroConfig from "./mikro-orm.config";
@@ -10,7 +10,7 @@ import { MikroORM } from "@mikro-orm/postgresql";
 import { buildSchema } from "type-graphql";
 
 // 🔹 Import Redis client and resolvers
-import { redis,connectRedisClient} from "./utils/redis";
+import { redis, connectRedisClient } from "./utils/redis";
 import { PostResolver } from "./resolvers/post";
 import { UserResolver } from "./resolvers/user";
 import { CompanyResolver } from "./resolvers/company";
@@ -44,46 +44,52 @@ import cors from "cors";
 // import connectRedis from "connect-redis";
 import RedisStore from "connect-redis";
 
-
 async function main() {
-  console.log("🚀 Starting server...");
+  console.log("Starting server...");
+
+  await connectRedisClient();
+  console.log("🔗 Using Redis URL:", process.env.REDIS_URL);
 
   const orm = await MikroORM.init(mikroConfig);
-  const result = await orm.em.getConnection().execute("SELECT 1");
-  console.log("✅ Test query result:", result);
+  console.log("Connected to DB at:", process.env.DATABASE_HOST);
+
+
+  // const result = await orm.em.getConnection().execute("SELECT 1");
+  // console.log("Test query result:", result);
 
   await orm.getSchemaGenerator().updateSchema();
 
   const app = express();
   app.set("trust proxy", 1);
+  
 
-
-  // 🔹 Proper Redis store setup for connect-redis@6
-  await connectRedisClient();
-// const RedisStore = connectRedis(session);
- const store = new (RedisStore as any)({
-  client: redis,
-  prefix: "sess:",
-  ttl: 60 * 60 * 24 * 7,
-});
+  // const RedisStore = connectRedis(session);
+  const store = new (RedisStore as any)({
+    client: redis,
+    prefix: "sess:",
+    ttl: 60 * 60 * 24 * 7,
+  });
 
   // 🔹 Handle CORS dynamically
- let corsOrigin: string = process.env.LOCAL_CORS_ORIGIN || "http://localhost:3000";
-if (process.env.NODE_ENV === "production" && process.env.PROD_CORS_ORIGIN) {
-  corsOrigin = process.env.PROD_CORS_ORIGIN;
-} else if (process.env.NODE_ENV === "studio" && process.env.APOLLO_CORS_ORIGIN) {
-  corsOrigin = process.env.APOLLO_CORS_ORIGIN;
-}
-
+  // let corsOrigin: string =
+  //   process.env.LOCAL_CORS_ORIGIN || "http://localhost:3000";
+  // if (process.env.NODE_ENV === "production" && process.env.PROD_CORS_ORIGIN) {
+  //   corsOrigin = process.env.PROD_CORS_ORIGIN;
+  // } else if (
+  //   process.env.NODE_ENV === "studio" &&
+  //   process.env.APOLLO_CORS_ORIGIN
+  // ) {
+  //   corsOrigin = process.env.APOLLO_CORS_ORIGIN;
+  // }
 
   app.use(
     cors({
-      origin: corsOrigin,
+      origin: [process.env.APOLLO_CORS_ORIGIN!, process.env.NGROK_CORS_ORIGIN!],
       credentials: true,
     })
   );
 
-  console.log(`🌐 CORS origin set to: ${corsOrigin}`);
+  // console.log(`CORS origin set to: ${corsOrigin}`);
 
   // 🔹 Express session with Redis
   app.use(
@@ -103,16 +109,15 @@ if (process.env.NODE_ENV === "production" && process.env.PROD_CORS_ORIGIN) {
   );
 
   // 🔹 Debug incoming requests
-  app.use((req, _res, next) => {
-    console.log("running purpose start=======");
-    
-    console.log(`[REQ] ${req.method} ${req.url}`);
-    console.log("Incoming Cookie header:", req.headers.cookie);
-    console.log("Session before Apollo:", req.session);
-
-     console.log("running purpose end=======");
-    next();
-  });
+  // app.use((req, _res, next) => {
+  //   console.log("running purpose start=======");
+  //   console.log(`[REQ] ${req.method} ${req.url}`);
+  //   console.log("Incoming Cookie header:", req.headers.cookie);
+  //   console.log("[REQ] Session ID:", req.sessionID);
+  //   console.log("Session before Apollo:", req.session);
+  //   console.log("running purpose end=======");
+  //   next();
+  // });
 
   // 🔹 Apollo Server setup
   const server = new ApolloServer({
@@ -156,21 +161,28 @@ if (process.env.NODE_ENV === "production" && process.env.PROD_CORS_ORIGIN) {
 
   app.use(
     "/graphql",
-    bodyParser.json(),
+    express.json(),
     expressMiddleware(server, {
       context: async ({ req, res }) => {
-        console.log("Session inside Apollo context:", req.session);
+        // console.log("Incoming GraphQL Request:", req.body?.query);
+        // console.log("Session inside Apollo context:", req.session);
         return { em: orm.em.fork(), req, res };
       },
     })
   );
+  // console.log(
+  //   "🔍 DB CONFIG:",
+  //   process.env.DATABASE_HOST,
+  //   process.env.DATABASE_USER,
+  //   process.env.DATABASE_PASSWORD
+  // );
 
   // 🔹 Start the server
   app.listen(process.env.PORT, () => {
     console.log(
-      `✅ Server running at http://localhost:${process.env.PORT}/graphql`
+      `Server running at http://localhost:${process.env.PORT}/graphql`
     );
   });
 }
 
-main().catch((err) => console.error("❌ Error starting server:", err));
+main().catch((err) => console.error("Error starting server:", err));

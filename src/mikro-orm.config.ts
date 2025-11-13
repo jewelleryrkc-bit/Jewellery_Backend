@@ -32,6 +32,7 @@ import { Conversation } from "./entities/Conversation";
 import { Invoice } from "./entities/Invoice";
 import { PayPalPayment } from "./entities/PaymentOrder";
 const isProd = __prod__;
+
 export default defineConfig({
   driverOptions: {
     connection: {
@@ -40,6 +41,7 @@ export default defineConfig({
       user: process.env.DATABASE_USER || "postgres",
       password: process.env.DATABASE_PASSWORD || "12345678",
       database: process.env.DATABASE_NAME || "rkcdb",
+    
     },
   },
   dbName: process.env.DATABASE_NAME || "rkcdb",

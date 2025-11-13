@@ -7,15 +7,14 @@ export const redis : RedisClientType = createClient({
 });
 
 redis.on("error", (err) => console.error("Redis Client Error", err));
+console.log("🧠 Redis connecting to:", redis.options?.url);
 
 export const connectRedisClient = async () => {
   if (!redis.isOpen) {
     await redis.connect();
-    console.log("✅ Connected to Redis");
+    console.log("Connected to Redis",redis.options?.url);
   }
 };
-
-
 
 
 // import Redis from "ioredis";

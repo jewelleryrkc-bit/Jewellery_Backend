@@ -157,13 +157,12 @@ async function getLocationFromIp(ip: string): Promise<LocationData> {
   }
 }
 
-@Resolver()
+@Resolver(() => User)
 export class UserResolver {
   @Query(() => User, { nullable: true })
-  async me(@Ctx() { req, em }: MyContext) {
+  async meUser(@Ctx() { req, em }: MyContext) {
     console.log("Checking session for user...");
-    console.log("Session ID:", req.sessionID);
-    console.log("Session content:", req.session);
+    console.log("Inside ME resolver, session userId:", req.session.userId);
 
     if (!req.session.userId) {
       console.log("No session userId — returning null");
@@ -175,7 +174,7 @@ export class UserResolver {
       { id: req.session.userId as string },
       { populate: ["addresses"] }
     );
-    console.log("Found user for session:", user?.email);
+    console.log("Found user for session:", user);
     return user;
   }
 
