@@ -33,6 +33,10 @@ export class ProductInput {
   @Field(() => String)
   weight!: string;
 
+
+  @Field(() => [String])
+  imageUrls!: string[];
+
   // Additional fields
   @Field({ nullable: true })
   brand?: string;
@@ -74,6 +78,7 @@ export class ProductInput {
   itemLength?: string;
 
   @Field({ nullable: true})
+  
   country?: string;
 
   @Field({ nullable: true })

@@ -1,4 +1,4 @@
-import { InputType, Field, Float } from "type-graphql";
+import { InputType, Field, Float, ID } from "type-graphql";
 
 @InputType()
 export class ProductVariationInput {
@@ -13,6 +13,13 @@ export class ProductVariationInput {
 
   @Field(() => Float)
   stock!: number;
+
+  @Field(() => [String], { nullable: true })
+  images?: string[];
+
+  @Field(() => ID)
+  productId!: string;
+
 }
 
 @InputType()
@@ -28,4 +35,7 @@ export class UpdateProductVariations {
 
   @Field({nullable: true})
   stock?: number;
+
+    @Field(() => [String], { nullable: true })
+  images?: string[];
 }

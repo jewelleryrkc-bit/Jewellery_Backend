@@ -12,7 +12,7 @@ import { Category } from "../entities/Category";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { EntityRepository } from "@mikro-orm/core";
 import { MyContext } from "../types";
-import { FieldError } from "../shared/ferror";
+import { FieldError } from "../../server/src/shared/ferror";
 import slugify from "slugify";
 
 @InputType()

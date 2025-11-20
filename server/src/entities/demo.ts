@@ -7,7 +7,7 @@
 // import { COOKIE_NAME } from "../constants";
 // import Redis from "ioredis";
 // import nodemailer from "nodemailer";
-// import { FieldError } from "../shared/ferror";
+// import { FieldError } from "../shared/ferror.ts";
 
 // const redis = new Redis();
 

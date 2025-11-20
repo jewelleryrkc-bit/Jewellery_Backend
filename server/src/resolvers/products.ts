@@ -131,7 +131,7 @@ export class ProductResolver {
         }),
       };
 
-      return await em.find(Product, filters, { populate: ["variations", "category","discount","discountedPrice"] });
+      return await em.find(Product, filters, { populate: ["variations", "category","subcategory","discount","discountedPrice"] });
     }
 
   @Query(() => [Product])

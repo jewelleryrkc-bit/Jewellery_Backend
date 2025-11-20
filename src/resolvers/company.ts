@@ -8,7 +8,7 @@ import { redis } from "../utils/redis";
 import nodemailer from "nodemailer";
 import { MyContext } from "src/types";
 import { COOKIE_NAME } from "../constants";
-import { FieldError } from "../shared/ferror";
+import { FieldError } from "../../server/src/shared/ferror";
 import { User } from "../entities/User";
 
 // const redis = new Redis();
@@ -201,6 +201,7 @@ export class CompanyResolver {
     }
 
     @Mutation(()=> Company)
+
     async deleteCompany(
         @Arg("id") id: string,
         @Ctx() { em }: MyContext

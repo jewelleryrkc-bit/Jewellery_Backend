@@ -25,6 +25,10 @@ export class ProductVariation {
   @Property({ type: "decimal" })
   stock!: number;
 
+  @Field(() => [String])
+  @Property({ type: "json", default: [] })
+  images: string[] = [];
+
   @Field(() => Product)
   @ManyToOne(() => Product)
   product!: Product;

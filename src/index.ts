@@ -1,5 +1,9 @@
+
+import dotenv from "dotenv";
+dotenv.config();
 import express, { RequestHandler } from "express";
-require("dotenv").config();
+import multer from "multer";
+import imageUploadRoute from "./routes/upload";
 // import bodyParser from "body-parser";
 import "reflect-metadata";
 import session from "express-session";
@@ -39,7 +43,8 @@ import { MessageResolver } from "./resolvers/messages";
 import { ConversationResolver } from "./resolvers/conversation";
 import { InvoiceResolver } from "./resolvers/invoice";
 import { PayPalResolver } from "./resolvers/paymentorder";
-
+import { UploadService } from "./services/uploadService";
+import { ProductImageResolver } from "./resolvers/productImage";
 import cors from "cors";
 // import connectRedis from "connect-redis";
 import RedisStore from "connect-redis";
@@ -54,16 +59,15 @@ async function main() {
   console.log("Connected to DB at:", process.env.DATABASE_HOST);
 
 
-  // const result = await orm.em.getConnection().execute("SELECT 1");
-  // console.log("Test query result:", result);
-
   await orm.getSchemaGenerator().updateSchema();
 
   const app = express();
   app.set("trust proxy", 1);
-  
 
-  // const RedisStore = connectRedis(session);
+  app.use(express.json());
+  app.use("/upload", imageUploadRoute);
+  const upload = multer({ dest: "uploads/" });
+
   const store = new (RedisStore as any)({
     client: redis,
     prefix: "sess:",
@@ -84,7 +88,8 @@ async function main() {
 
   app.use(
     cors({
-      origin: [process.env.APOLLO_CORS_ORIGIN!, process.env.NGROK_CORS_ORIGIN!],
+      // origin: [process.env.APOLLO_CORS_ORIGIN!, process.env.NGROK_CORS_ORIGIN!],
+       origin: ["http://localhost:3000"],
       credentials: true,
     })
   );
@@ -108,16 +113,28 @@ async function main() {
     }) as unknown as RequestHandler
   );
 
-  // 🔹 Debug incoming requests
-  // app.use((req, _res, next) => {
-  //   console.log("running purpose start=======");
-  //   console.log(`[REQ] ${req.method} ${req.url}`);
-  //   console.log("Incoming Cookie header:", req.headers.cookie);
-  //   console.log("[REQ] Session ID:", req.sessionID);
-  //   console.log("Session before Apollo:", req.session);
-  //   console.log("running purpose end=======");
-  //   next();
-  // });
+  // -------------------
+// FILE UPLOAD ENDPOINT
+// -------------------
+app.post("/upload", upload.single("file"), async (req, res) => {
+  try {
+    const file = req.file; // multer adds this
+
+    if (!file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    // process upload using your UploadService
+    const result = await UploadService.uploadImage(file); 
+    return res.json({ url: result.url });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+
+    // app.use(graphqlUploadExpress());
 
   // 🔹 Apollo Server setup
   const server = new ApolloServer({
@@ -151,7 +168,9 @@ async function main() {
         ProductResolver,
         ProductVariationResolver,
         AdminResolver,
+       ProductImageResolver,
       ],
+      // scalarsMap: [{ type: FileUpload, scalar: UploadScalar }],
       validate: false,
     }),
     csrfPrevention: false,
@@ -170,13 +189,9 @@ async function main() {
       },
     })
   );
-  // console.log(
-  //   "🔍 DB CONFIG:",
-  //   process.env.DATABASE_HOST,
-  //   process.env.DATABASE_USER,
-  //   process.env.DATABASE_PASSWORD
-  // );
-
+ 
+  new UploadService();
+  
   // 🔹 Start the server
   app.listen(process.env.PORT, () => {
     console.log(

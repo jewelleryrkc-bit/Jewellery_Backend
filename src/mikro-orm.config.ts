@@ -31,6 +31,7 @@ import { Messages } from "./entities/Messages";
 import { Conversation } from "./entities/Conversation";
 import { Invoice } from "./entities/Invoice";
 import { PayPalPayment } from "./entities/PaymentOrder";
+import {ProductImage} from "./entities/ProductImage";
 const isProd = __prod__;
 
 export default defineConfig({
@@ -85,6 +86,7 @@ export default defineConfig({
         Admin,
         CartItem,
         Review,
+        ProductImage
       ],
   entitiesTs: ["./src/entities/**/*.ts"],
   namingStrategy: UnderscoreNamingStrategy,

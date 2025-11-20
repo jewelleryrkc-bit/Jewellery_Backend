@@ -2,7 +2,7 @@ import { Company } from "../entities/Company";
 import { SellerCategories } from "../entities/SellerCategories";
 import slugify from "slugify";
 import { SellerCatInput } from "../inputs/sellerCategoryInput";
-import { FieldError } from "../shared/ferror";
+import { FieldError } from "../../server/src/shared/ferror";
 import { MyContext } from "../types";
 import { Arg, Ctx, Field, Mutation, ObjectType, Query, Resolver } from "type-graphql";
 

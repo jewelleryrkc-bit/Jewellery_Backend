@@ -15,7 +15,7 @@ import {
 import argon2 from "argon2";
 import { redis } from "../utils/redis";
 import nodemailer from "nodemailer";
-import { FieldError } from "../shared/ferror";
+import { FieldError } from "../../server/src/shared/ferror";
 
 const cookiename = process.env.COOKIE_NAME as string;
 
@@ -160,7 +160,7 @@ async function getLocationFromIp(ip: string): Promise<LocationData> {
 @Resolver(() => User)
 export class UserResolver {
   @Query(() => User, { nullable: true })
-  async meUser(@Ctx() { req, em }: MyContext) {
+  async we(@Ctx() { req, em }: MyContext) {
     console.log("Checking session for user...");
     console.log("Inside ME resolver, session userId:", req.session.userId);
 

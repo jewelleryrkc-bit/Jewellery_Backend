@@ -16,9 +16,9 @@ export class Category {
   @PrimaryKey({ type: "uuid" })
   id: string = crypto.randomUUID();
 
-  @Field(() => String)
+  @Field(() => String,{ nullable: true })
   @Property()
-  name!: string;
+  name?: string;
 
   @Field()
   @Property({ unique: true })

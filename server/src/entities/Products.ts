@@ -1,5 +1,21 @@
-import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection, BeforeCreate, Enum } from "@mikro-orm/core";
-import { Field, Float, ID, Int, ObjectType, registerEnumType } from "type-graphql";
+import {
+  Entity,
+  PrimaryKey,
+  Property,
+  ManyToOne,
+  OneToMany,
+  Collection,
+  BeforeCreate,
+  Enum,
+} from "@mikro-orm/core";
+import {
+  Field,
+  Float,
+  ID,
+  Int,
+  ObjectType,
+  registerEnumType,
+} from "type-graphql";
 import { Category } from "./Category";
 import { ProductVariation } from "../entities/ProductVar";
 import { Company } from "./Company";
@@ -9,13 +25,13 @@ import { Discount } from "./Discount";
 
 export enum ProductStatus {
   ACTIVE = "ACTIVE",
-  DISABLED = "DISABLED"
+  DISABLED = "DISABLED",
 }
 
 registerEnumType(ProductStatus, {
   name: "ProductStatus",
-  description: "The status of product: ACTIVE OR DISABLED"
-})
+  description: "The status of product: ACTIVE OR DISABLED",
+});
 
 @ObjectType()
 @Entity()
@@ -29,11 +45,11 @@ export class Product {
   name!: string;
 
   @Field()
-  @Property({ unique: true})
+  @Property({ unique: true })
   slug!: string;
 
   @Field()
-  @Property({type: "text"})
+  @Property({ type: "text" })
   description!: string;
 
   @Field()
@@ -45,7 +61,7 @@ export class Product {
   discountedPrice?: number;
 
   @Field(() => Discount, { nullable: true })
-  @ManyToOne(() => Discount, { nullable: true})
+  @ManyToOne(() => Discount, { nullable: true })
   discount?: Discount;
 
   @Field()
@@ -65,27 +81,27 @@ export class Product {
   material!: string;
 
   @Field()
-  @Property({type: "text"})
+  @Property({ type: "text" })
   weight!: string;
 
   @Field(() => Category)
   @ManyToOne(() => Category)
   category!: Category;
 
-  @Field(() => Category)
-  @ManyToOne(() => Category)
-  subcategory!: Category;
+  @Field(() => Category, { nullable: true })
+  @ManyToOne(() => Category, { nullable: true })
+  subcategory?: Category;
 
   @Field(() => [ProductVariation])
   @OneToMany(() => ProductVariation, (variation) => variation.product)
   variations = new Collection<ProductVariation>(this);
 
-  @Field(()=> Company)
+  @Field(() => Company)
   @ManyToOne(() => Company)
   company!: Company;
 
   @Field(() => [Review])
-  @OneToMany(() => Review, (review) => review.product, {nullable: true})
+  @OneToMany(() => Review, (review) => review.product, { nullable: true })
   reviews = new Collection<Review>(this);
 
   @Field(() => Float, { nullable: true })
@@ -227,12 +243,12 @@ export class Product {
       this.slug = slugify(this.name, { lower: true, strict: true });
     }
   }
-  
-  @Field(()=> String)
+
+  @Field(() => String)
   @Property({ onCreate: () => new Date() })
   createdAt: Date = new Date();
 
-  @Field(()=> String)
+  @Field(() => String)
   @Property({ onUpdate: () => new Date() })
   updatedAt: Date = new Date();
 }
