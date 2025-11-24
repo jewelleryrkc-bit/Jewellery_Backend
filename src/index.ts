@@ -2,7 +2,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 import express, { RequestHandler } from "express";
-import multer from "multer";
+// import multer from "multer";
 import imageUploadRoute from "./routes/upload";
 // import bodyParser from "body-parser";
 import "reflect-metadata";
@@ -64,9 +64,20 @@ async function main() {
   const app = express();
   app.set("trust proxy", 1);
 
+  
+  app.use(
+    cors({
+      // origin: [process.env.APOLLO_CORS_ORIGIN!, process.env.NGROK_CORS_ORIGIN!],
+       origin: ["http://localhost:3000"],
+      credentials: true,
+    })
+  );
+
+  // console.log(`CORS origin set to: ${corsOrigin}`);
+
   app.use(express.json());
   app.use("/upload", imageUploadRoute);
-  const upload = multer({ dest: "uploads/" });
+  // const upload = multer({ dest: "uploads/" });
 
   const store = new (RedisStore as any)({
     client: redis,
@@ -86,15 +97,6 @@ async function main() {
   //   corsOrigin = process.env.APOLLO_CORS_ORIGIN;
   // }
 
-  app.use(
-    cors({
-      // origin: [process.env.APOLLO_CORS_ORIGIN!, process.env.NGROK_CORS_ORIGIN!],
-       origin: ["http://localhost:3000"],
-      credentials: true,
-    })
-  );
-
-  // console.log(`CORS origin set to: ${corsOrigin}`);
 
   // 🔹 Express session with Redis
   app.use(
@@ -116,22 +118,22 @@ async function main() {
   // -------------------
 // FILE UPLOAD ENDPOINT
 // -------------------
-app.post("/upload", upload.single("file"), async (req, res) => {
-  try {
-    const file = req.file; // multer adds this
+// app.post("/upload", upload.single("file"), async (req, res) => {
+//   try {
+//     const file = req.file; // multer adds this
 
-    if (!file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
+//     if (!file) {
+//       return res.status(400).json({ error: "No file uploaded" });
+//     }
 
-    // process upload using your UploadService
-    const result = await UploadService.uploadImage(file); 
-    return res.json({ url: result.url });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Upload failed" });
-  }
-});
+//     // process upload using your UploadService
+//     const result = await UploadService.uploadImage(file); 
+//     return res.json({ url: result.url });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ error: "Upload failed" });
+//   }
+// });
 
 
     // app.use(graphqlUploadExpress());

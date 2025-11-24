@@ -29,8 +29,8 @@ export class ProductVariation {
   @ManyToOne(() => Product)
   product!: Product;
 
-  @Field(()=> ID)
-  productId!: string;
+  // @Field(()=> ID)
+  // productId!: string;
 
   @Field()
   @Property({ unique: true })

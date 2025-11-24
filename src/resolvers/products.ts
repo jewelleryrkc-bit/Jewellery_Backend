@@ -59,7 +59,7 @@ export class ProductResolver {
       Product,
       { company: req.session.companyId },
       {
-        populate: ["reviews", "variations"],
+        populate: ["reviews", "variations","company"],
       }
     );
   }

@@ -17,7 +17,7 @@ export class ProductVariationInput {
   @Field(() => [String], { nullable: true })
   images?: string[];
 
-  @Field(() => ID)
+  @Field(() => ID, { nullable: true })
   productId!: string;
 
 }

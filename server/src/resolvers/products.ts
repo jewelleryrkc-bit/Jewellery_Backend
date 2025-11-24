@@ -276,7 +276,7 @@ export class ProductResolver {
             product,
             createdAt: new Date(),
             updatedAt: new Date(),
-            productId: product.id,
+            // productId: product.id,
             slug: variationSlug,
             name: product.name,
             description: product.description,

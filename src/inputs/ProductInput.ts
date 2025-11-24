@@ -34,7 +34,7 @@ export class ProductInput {
   weight!: string;
 
 
-  @Field(() => [String])
+  @Field(() => [String],{ nullable: true }) 
   imageUrls!: string[];
 
   // Additional fields

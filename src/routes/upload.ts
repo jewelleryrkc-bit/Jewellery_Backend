@@ -9,8 +9,11 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 router.post("/images", upload.array("images"), async (req, res) => {
   try {
+
+    console.log("FILES RECEIVED FROM FRONTEND:", req.files);
     const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) {
+      console.log("❌ No files received");
       return res.status(400).json({ error: "No files uploaded" });
     }
 
@@ -21,7 +24,7 @@ router.post("/images", upload.array("images"), async (req, res) => {
       const result = await UploadService.uploadImage(file); // returns { url, key }
       uploadedImages.push(result);
     }
-
+    console.log(" FINAL RESPONSE:", uploadedImages);
     // Return structured response for frontend
     return res.json({ images: uploadedImages });
 
