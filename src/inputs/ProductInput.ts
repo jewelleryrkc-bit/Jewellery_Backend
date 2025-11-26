@@ -1,5 +1,6 @@
 import { InputType, Field, Float } from "type-graphql";
 import { ProductVariationInput } from "../inputs/ProductVarInput";
+import { ProductImageInput } from "./ProductImageInput";
 
 @InputType()
 export class ProductInput {
@@ -15,8 +16,10 @@ export class ProductInput {
   @Field(() => Float)
   stock!: number;
 
-  @Field()
-  subcategory!: string;
+  
+  @Field(() => String, { nullable: true }) 
+  subcategory?: string;
+
 
   @Field()
   material!: string;
@@ -33,9 +36,11 @@ export class ProductInput {
   @Field(() => String)
   weight!: string;
 
+  // @Field(() => [String],{ nullable: true })
+  // imageUrls!: string[];
 
-  @Field(() => [String],{ nullable: true }) 
-  imageUrls!: string[];
+  @Field(() => [ProductImageInput], { nullable: true })
+  images?: ProductImageInput[];
 
   // Additional fields
   @Field({ nullable: true })
@@ -77,8 +82,7 @@ export class ProductInput {
   @Field({ nullable: true })
   itemLength?: string;
 
-  @Field({ nullable: true})
-  
+  @Field({ nullable: true })
   country?: string;
 
   @Field({ nullable: true })
@@ -166,7 +170,7 @@ export class UpdateProductFields {
   @Field({ nullable: true })
   upc?: string;
 
-  @Field({ nullable: true})
+  @Field({ nullable: true })
   country?: string;
 
   @Field({ nullable: true })

@@ -85,19 +85,6 @@ async function main() {
     ttl: 60 * 60 * 24 * 7,
   });
 
-  // 🔹 Handle CORS dynamically
-  // let corsOrigin: string =
-  //   process.env.LOCAL_CORS_ORIGIN || "http://localhost:3000";
-  // if (process.env.NODE_ENV === "production" && process.env.PROD_CORS_ORIGIN) {
-  //   corsOrigin = process.env.PROD_CORS_ORIGIN;
-  // } else if (
-  //   process.env.NODE_ENV === "studio" &&
-  //   process.env.APOLLO_CORS_ORIGIN
-  // ) {
-  //   corsOrigin = process.env.APOLLO_CORS_ORIGIN;
-  // }
-
-
   // 🔹 Express session with Redis
   app.use(
     session({
@@ -114,29 +101,6 @@ async function main() {
       },
     }) as unknown as RequestHandler
   );
-
-  // -------------------
-// FILE UPLOAD ENDPOINT
-// -------------------
-// app.post("/upload", upload.single("file"), async (req, res) => {
-//   try {
-//     const file = req.file; // multer adds this
-
-//     if (!file) {
-//       return res.status(400).json({ error: "No file uploaded" });
-//     }
-
-//     // process upload using your UploadService
-//     const result = await UploadService.uploadImage(file); 
-//     return res.json({ url: result.url });
-//   } catch (err) {
-//     console.error(err);
-//     return res.status(500).json({ error: "Upload failed" });
-//   }
-// });
-
-
-    // app.use(graphqlUploadExpress());
 
   // 🔹 Apollo Server setup
   const server = new ApolloServer({
@@ -185,8 +149,6 @@ async function main() {
     express.json(),
     expressMiddleware(server, {
       context: async ({ req, res }) => {
-        // console.log("Incoming GraphQL Request:", req.body?.query);
-        // console.log("Session inside Apollo context:", req.session);
         return { em: orm.em.fork(), req, res };
       },
     })

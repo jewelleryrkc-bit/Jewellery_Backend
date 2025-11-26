@@ -15,7 +15,7 @@ import {
 import argon2 from "argon2";
 import { redis } from "../utils/redis";
 import nodemailer from "nodemailer";
-import { FieldError } from "../../server/src/shared/ferror";
+  import { FieldError } from "../shared/ferror";
 
 const cookiename = process.env.COOKIE_NAME as string;
 

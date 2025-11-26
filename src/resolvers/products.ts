@@ -21,9 +21,10 @@ import { v4 as uuidv4 } from "uuid";
 import { getOrSetCache, invalidateProductData } from "../utils/cache";
 import { Discount, DiscountType } from "../entities/Discount";
 
-import { FileUpload, GraphQLUpload } from "graphql-upload-ts";
+// import { FileUpload, GraphQLUpload } from "graphql-upload-ts";
 import { UploadService } from "../services/uploadService";
 import { ProductImage } from "../entities/ProductImage";
+// import { ProductImageInput } from "../inputs/ProductImageInput";
 
 @Resolver(() => Product)
 export class ProductResolver {
@@ -59,7 +60,7 @@ export class ProductResolver {
       Product,
       { company: req.session.companyId },
       {
-        populate: ["reviews", "variations","company"],
+        populate: ["reviews", "variations", "company"],
       }
     );
   }
@@ -160,8 +161,14 @@ export class ProductResolver {
     };
 
     return await em.find(Product, filters, {
-      populate: ["variations",  "images","category", "subcategory", "discount", "discountedPrice"],
-
+      populate: [
+        "variations",
+        "images",
+        "category",
+        "subcategory",
+        "discount",
+        "discountedPrice",
+      ],
     });
   }
 
@@ -237,142 +244,131 @@ export class ProductResolver {
     );
   }
 
- @Mutation(() => Product)
-async createProduct(
-  @Arg("input", () => ProductInput) input: ProductInput,
-  @Arg("images", () => [GraphQLUpload], { nullable: true }) images: Promise<FileUpload>[],
-  @Arg("vendorId", () => String, { nullable: true }) vendorId: string,
-  @Ctx() { em, req }: MyContext
-): Promise<Product> {
+  @Mutation(() => Product)
+  async createProduct(
+    @Arg("input", () => ProductInput) input: ProductInput,
+    @Arg("vendorId", () => String, { nullable: true }) vendorId?: string,
+    // @Arg("images", () => [ProductImageInput], { nullable: true }) images?: ProductImageInput[],
+    @Ctx() { em, req }: MyContext = {} as MyContext
+  ): Promise<Product> {
+    const loggedVendor = req.session.companyId;
+    const loggedAdmin = req.session.adminId;
 
-  const loggedVendor = req.session.companyId;
-  const loggedAdmin = req.session.adminId;
-
-  // --------- ACCESS CONTROL ------------
-  if (!loggedVendor && !loggedAdmin) {
-    throw new Error("Only vendors or admins can create products.");
-  }
-
- if ((!images || images.length === 0) && (!input.imageUrls || input.imageUrls.length === 0)) {
-  throw new Error("At least one product image is required.");
-}
-
-
-  // Determine company
-  let company: Company | null = null;
-  if (loggedVendor) company = await em.findOne(Company, { id: loggedVendor });
-  else if (loggedAdmin) {
-    if (!vendorId) throw new Error("Admin must provide vendorId.");
-    company = await em.findOne(Company, { id: vendorId });
-  }
-  if (!company) throw new Error("Vendor/Company not found!");
-
-  // Validate categories
-  const category = await em.findOne(Category, { id: input.category });
-  const subcategory = await em.findOne(Category, { id: input.subcategory });
-  if (!category) throw new Error("Invalid category.");
-  if (!subcategory) throw new Error("Invalid subcategory.");
-
-  // Slug
-  const baseSlug = slugify(input.name, { lower: true, strict: true });
-  const uuidSuffix = uuidv4().split("-")[0];
-  const finalSlug = `${baseSlug}-${uuidSuffix}`;
-
-  // Create product entity
-  const product = em.create(Product, {
-    ...input,
-    category,
-    subcategory,
-    company,
-    slug: finalSlug,
-    averageRating: 0,
-    soldCount: 0,
-    reviewCount: 0,
-    variations: [],
-    images: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    status: ProductStatus.ACTIVE,
-  });
-
-  // Apply category discount
-  const activeDiscounts = await em.find(Discount, {
-    category: input.category,
-    status: "active",
-    isActive: true,
-    startDate: { $lte: new Date() },
-    $or: [{ endDate: null }, { endDate: { $gte: new Date() } }],
-  });
-  if (activeDiscounts.length > 0) {
-    const discount = activeDiscounts[0];
-    product.discount = discount;
-    product.discountedPrice =
-      discount.type === DiscountType.PERCENTAGE
-        ? product.price * (1 - discount.value / 100)
-        : Math.max(0, product.price - discount.value);
-  }
-
-  await em.persistAndFlush(product);
-
-  // Variations
-  if (input.variations) {
-    for (const variationInput of input.variations) {
-      if (!variationInput.size) throw new Error("Variation must have a size.");
-      if (!variationInput.color) throw new Error("Variation must have a color.");
-
-      const variationSlug = slugify(
-        `${product.slug}-${variationInput.size}-${variationInput.color}-${uuidv4().split("-")[0]}`,
-        { lower: true, strict: true }
-      );
-
-      const variation = em.create(ProductVariation, {
-        ...variationInput,
-        product,
-        productId: product.id,
-        slug: variationSlug,
-        name: product.name,
-        description: product.description,
-        material: product.material,
-        images: variationInput.images || [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      product.variations.add(variation);
-      await em.persistAndFlush(variation);
+    // --------- ACCESS CONTROL ------------
+    if (!loggedVendor && !loggedAdmin) {
+      throw new Error("Only vendors or admins can create products.");
     }
-  }
 
-  // Upload images
-  if (images && images.length > 0) {
-    const uploader = new UploadService();
-    const uploadedFiles = await uploader.uploadMany(images, "products");
-    for (const file of uploadedFiles) {
+    // Determine company
+    let company: Company | null = null;
+    if (loggedVendor) company = await em.findOne(Company, { id: loggedVendor });
+    else if (loggedAdmin) {
+      if (!vendorId) throw new Error("Admin must provide vendorId.");
+      company = await em.findOne(Company, { id: vendorId });
+    }
+    if (!company) throw new Error("Vendor/Company not found!");
+
+    // Validate categories
+    const category = await em.findOne(Category, { id: input.category });
+    // const subcategory = await em.findOne(Category, { id: input.subcategory });
+    if (!category) throw new Error("Invalid category.");
+    let subcategory: Category | null = null;
+    if (input.subcategory) {
+      subcategory = await em.findOne(Category, { id: input.subcategory });
+      if (!subcategory) throw new Error("Invalid subcategory.");
+    }
+
+    // Slug
+    const baseSlug = slugify(input.name, { lower: true, strict: true });
+    const uuidSuffix = uuidv4().split("-")[0];
+    const finalSlug = `${baseSlug}-${uuidSuffix}`;
+
+    // Create product entity
+    const product = em.create(Product, {
+      ...input,
+      category,
+      subcategory,
+      company,
+      slug: finalSlug,
+      averageRating: 0,
+      soldCount: 0,
+      reviewCount: 0,
+      variations: [],
+      images: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: ProductStatus.ACTIVE,
+    });
+
+    // Apply category discount
+    const activeDiscounts = await em.find(Discount, {
+      category: input.category,
+      status: "active",
+      isActive: true,
+      startDate: { $lte: new Date() },
+      $or: [{ endDate: null }, { endDate: { $gte: new Date() } }],
+    });
+    if (activeDiscounts.length > 0) {
+      const discount = activeDiscounts[0];
+      product.discount = discount;
+      product.discountedPrice =
+        discount.type === DiscountType.PERCENTAGE
+          ? product.price * (1 - discount.value / 100)
+          : Math.max(0, product.price - discount.value);
+    }
+
+    await em.persistAndFlush(product);
+
+    // Variations
+    if (input.variations) {
+      for (const variationInput of input.variations) {
+        if (!variationInput.size)
+          throw new Error("Variation must have a size.");
+        if (!variationInput.color)
+          throw new Error("Variation must have a color.");
+
+        const variationSlug = slugify(
+          `${product.slug}-${variationInput.size}-${variationInput.color}-${
+            uuidv4().split("-")[0]
+          }`,
+          { lower: true, strict: true }
+        );
+
+        const variation = em.create(ProductVariation, {
+          ...variationInput,
+          product,
+          productId: product.id,
+          slug: variationSlug,
+          name: product.name,
+          description: product.description,
+          material: product.material,
+          images: variationInput.images || [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        product.variations.add(variation);
+        await em.persistAndFlush(variation);
+      }
+    }
+
+    // Save images from ProductInput (after REST upload)
+    if (!input.images || input.images.length === 0) {
+      throw new Error("At least one product image is required.");
+    }
+
+    for (const imgData of input.images) {
       const img = em.create(ProductImage, {
-        url: file.url,
-        key: file.key,
+        url: imgData.url,
+        key: imgData.key,
         product,
       });
       product.images.add(img);
       await em.persistAndFlush(img);
     }
+
+    return product;
   }
-
-  if ((!images || images.length === 0) && input.imageUrls && input.imageUrls.length > 0) {
-    for (const url of input.imageUrls) {
-      const img = em.create(ProductImage, {
-        url,
-        key: url.split("/").pop() || uuidv4(),
-        product,
-      });
-      product.images.add(img);
-      await em.persistAndFlush(img);
-    }
-  }
-
-  return product;
-}
-
 
   @Mutation(() => Product)
   async updateProducts(
@@ -411,39 +407,40 @@ async createProduct(
     return product;
   }
 
-@Mutation(() => Product)
-async deleteProduct(
-  @Arg("id") id: string,
-  @Ctx() { em, req }: MyContext
-): Promise<Product> {
-  const vendorId = req.session.companyId;
-  const adminId = req.session.adminId;
+  @Mutation(() => Product)
+  async deleteProduct(
+    @Arg("id") id: string,
+    @Ctx() { em, req }: MyContext
+  ): Promise<Product> {
+    const vendorId = req.session.companyId;
+    const adminId = req.session.adminId;
 
-  if (!vendorId && !adminId)
-    throw new Error("Only vendors or admins can delete products.");
+    if (!vendorId && !adminId)
+      throw new Error("Only vendors or admins can delete products.");
 
-  const product = await em.findOne(Product, { id }, { populate: ["images", "company"] });
-  if (!product) throw new Error("Product not found");
+    const product = await em.findOne(
+      Product,
+      { id },
+      { populate: ["images", "company"] }
+    );
+    if (!product) throw new Error("Product not found");
 
-  // Multi-vendor safety
-  if (vendorId && product.company.id !== vendorId)
-    throw new Error("You cannot delete another vendor's product");
+    // Multi-vendor safety
+    if (vendorId && product.company.id !== vendorId)
+      throw new Error("You cannot delete another vendor's product");
 
-  const uploader = new UploadService();
+    const uploader = new UploadService();
 
-  // Delete all product images from cloud
-  for (const img of product.images) {
-    await uploader.delete(img.key);
+    // Delete all product images from cloud
+    for (const img of product.images) {
+      await uploader.delete(img.key);
+    }
+
+    await em.removeAndFlush(product.images); // Delete image records
+    await em.removeAndFlush(product); // Delete product
+
+    return product;
   }
-
-  await em.removeAndFlush(product.images); // Delete image records
-  await em.removeAndFlush(product);        // Delete product
-
-  return product;
-}
-
-
-
 
   @Mutation(() => Boolean)
   async toggleProductStatus(

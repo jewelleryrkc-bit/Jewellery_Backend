@@ -9,7 +9,7 @@ import {
     Query,
   } from "type-graphql";
   import { MyContext } from "src/types";
-  import { FieldError } from "../../server/src/shared/ferror";
+  import { FieldError } from "../shared/ferror";
   import { COOKIE_NAME } from "../constants";
   import { Admin } from "../entities/Admin";
   // import Redis from "ioredis";
