@@ -12,8 +12,19 @@ import { Category } from "../entities/Category";
 import { InjectRepository } from "@mikro-orm/nestjs";
 import { EntityRepository } from "@mikro-orm/core";
 import { MyContext } from "../types";
-  import { FieldError } from "../shared/ferror";
+import { FieldError } from "../shared/ferror";
 import slugify from "slugify";
+import { CategoryImage } from "../entities/CategoryImage";
+
+
+@InputType()
+class CategoryImageInput {
+  @Field()
+  url!: string;
+
+  @Field()
+  key!: string;
+}
 
 @InputType()
 class CategoryInput {
@@ -22,6 +33,9 @@ class CategoryInput {
 
   @Field({ nullable: true })
   parentCategoryId?: string;
+
+  @Field(() => [CategoryImageInput], { nullable: true })
+  images?: CategoryImageInput[];
 }
 
 @ObjectType()
@@ -41,38 +55,41 @@ export class CategoryResolver {
   ) {}
 
   @Query(() => [Category])
-    async categories(@Ctx() { em }: MyContext): Promise<Category[]> {
-      const categories = await em.find(
-        Category, 
-        {}, 
-        { 
-          populate: ['subcategories', 'products'],
-          orderBy: { name: 'ASC' }
-        }
-      );
+  async categories(@Ctx() { em }: MyContext): Promise<Category[]> {
+    const categories = await em.find(
+      Category,
+      {},
+      {
+        populate: ["subcategories", "products","images"],
+        orderBy: { name: "ASC" },
+      }
+    );
 
-      // Ensure no null names while maintaining entity instances
-      categories.forEach(category => {
-        if (!category.name) {
-          category.name = 'Uncategorized';
-        }
-        
-        // Initialize collections if they're not loaded
-        if (!category.subcategories.isInitialized()) {
-          category.subcategories.set([]);
-        }
-        
-        if (!category.products.isInitialized()) {
-          category.products.set([]);
-        }
-      });
+    // Ensure no null names while maintaining entity instances
+    categories.forEach((category) => {
+      if (!category.name) {
+        category.name = "Uncategorized";
+      }
 
-      return categories;
-    }
+      // Initialize collections if they're not loaded
+      if (!category.subcategories.isInitialized()) {
+        category.subcategories.set([]);
+      }
+
+      if (!category.products.isInitialized()) {
+        category.products.set([]);
+      }
+    });
+
+    return categories;
+  }
 
   @Query(() => Category, { nullable: true })
   async category(@Arg("id") id: string): Promise<Category | null> {
-    return await this.categoryRepository.findOne({ id }, { populate: ["products"] });
+    return await this.categoryRepository.findOne(
+      { id },
+      { populate: ["products"] }
+    );
   }
 
   @Query(() => [Category])
@@ -80,7 +97,11 @@ export class CategoryResolver {
     @Arg("parentCategoryId") parentCategoryId: string,
     @Ctx() { em }: MyContext
   ): Promise<Category[]> {
-    return await em.find(Category, { parentCategory: parentCategoryId }, { populate: ['products'] });
+    return await em.find(
+      Category,
+      { parentCategory: parentCategoryId },
+      { populate: ["products"] }
+    );
   }
 
   @Query(() => [Category])
@@ -89,58 +110,83 @@ export class CategoryResolver {
   }
 
   @Mutation(() => CategoryResponse)
-async createCategory(
-  @Arg("options") options: CategoryInput,
-  @Ctx() { em }: MyContext
-): Promise<CategoryResponse> {
-  const trimmedName = options.name.trim();
-  let parentCategory = null;
+  async createCategory(
+    @Arg("options") options: CategoryInput,
+    @Ctx() { em }: MyContext
+  ): Promise<CategoryResponse> {
+    const trimmedName = options.name.trim();
+    let parentCategory = null;
 
-  if (options.parentCategoryId) {
-    parentCategory = await em.findOne(Category, { id: options.parentCategoryId });
-    if (!parentCategory) {
+    if (options.parentCategoryId) {
+      parentCategory = await em.findOne(Category, {
+        id: options.parentCategoryId,
+      });
+      if (!parentCategory) {
+        return {
+          errors: [
+            {
+              field: "parentCategoryId",
+              message: "Parent category not found",
+            },
+          ],
+        };
+      }
+    }
+
+    let slug = slugify(trimmedName, { lower: true, strict: true });
+    let suffix = 1;
+    const originalSlug = slug;
+
+    while (await em.findOne(Category, { slug })) {
+      slug = `${originalSlug}-${suffix++}`;
+    }
+
+    const category = em.create(Category, {
+      name: trimmedName,
+      parentCategory: parentCategory ?? null,
+      slug,
+      createdAt: new Date(),
+    });
+
+    if (options.images && options.images.length > 0) {
+  options.images.forEach(img => {
+    if(!img.url || !img.key){
+ throw new Error("Image must have both URL and key");
+    }
+    const categoryImage = em.create(CategoryImage, { 
+      url: img.url, 
+      key: img.key, 
+      category 
+    });
+    category.images.add(categoryImage); // Add to category's collection
+  });
+}
+
+    console.log(category);
+    
+    try {
+      await em.persistAndFlush(category);
+
+      // Ensure fresh data with ID
+      const savedCategory = await em.findOneOrFail(Category, 
+        {id: category.id,},
+       { populate: ["images"]}
+    );
+
+      return { category: savedCategory };
+    } catch (err) {
+      console.error("Error creating category:", err);
+
       return {
-        errors: [{
-          field: "parentCategoryId",
-          message: "Parent category not found",
-        }],
+        errors: [
+          {
+            field: "general",
+            message: "Unknown error creating category",
+          },
+        ],
       };
     }
   }
-
-  let slug = slugify(trimmedName, { lower: true, strict: true });
-  let suffix = 1;
-  const originalSlug = slug;
-
-  while (await em.findOne(Category, { slug })) {
-    slug = `${originalSlug}-${suffix++}`;
-  }
-
-  const category = em.create(Category, {
-    name: trimmedName,
-    parentCategory: parentCategory ?? null,
-    slug,
-    createdAt: new Date(),
-  });
-
-  try {
-    await em.persistAndFlush(category);
-
-    // Ensure fresh data with ID
-    const savedCategory = await em.findOneOrFail(Category, { id: category.id });
-
-    return { category: savedCategory };
-  } catch (err) {
-    console.error("Error creating category:", err);
-
-    return {
-      errors: [{
-        field: "general",
-        message: "Unknown error creating category",
-      }],
-    };
-  }
-}
 
   @Query(() => Category, { nullable: true })
   async categoryBySlug(
@@ -148,9 +194,9 @@ async createCategory(
     @Ctx() { em }: MyContext
   ): Promise<Category | null> {
     return await em.findOne(
-      Category, 
+      Category,
       { slug: { $ilike: slug } }, // Case-insensitive search
-      { populate: ["products", "subcategories"] }
+     { populate: ["products", "products.images", "subcategories"] }
     );
   }
 }

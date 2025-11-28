@@ -8,6 +8,7 @@ import {
 } from "@mikro-orm/core";
 import { Field, ID, ObjectType } from "type-graphql";
 import { Product } from "./Products";
+import { CategoryImage } from "./CategoryImage";
 
 @ObjectType()
 @Entity()
@@ -39,6 +40,10 @@ export class Category {
   @Field(() => [Product])
   @OneToMany(() => Product, (product) => product.category)
   products = new Collection<Product>(this);
+
+  @Field(() => [CategoryImage], { nullable: true })
+  @OneToMany(() => CategoryImage, (image) => image.category)
+  images = new Collection<CategoryImage>(this);
 
   @Field(() => String)
   @Property({ onCreate: () => new Date() })
