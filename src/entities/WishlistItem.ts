@@ -1,9 +1,10 @@
 // src/entities/CartItem.ts
-import { Entity, PrimaryKey, Property, ManyToOne, Unique } from "@mikro-orm/core";
+import { Entity, PrimaryKey, Property, ManyToOne, Unique} from "@mikro-orm/core";
 import { Field, ID, ObjectType } from "type-graphql";
 import { Wishlist } from "./Wishlist";
 import { Product } from "./Products";
 import { ProductVariation } from "./ProductVar";
+
 
 @Unique({ properties: ['product', 'variation', 'wishlist'] })
 @ObjectType()

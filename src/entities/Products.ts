@@ -255,7 +255,8 @@ export class Product {
   updatedAt: Date = new Date();
 
   @Field(() => [ProductImage])
-  @OneToMany(() => ProductImage, (img) => img.product, {
+  @OneToMany(() => ProductImage, (img) => img.product,{
+    eager: true,
     cascade: [Cascade.PERSIST],
   })
   images = new Collection<ProductImage>(this);

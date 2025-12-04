@@ -95,7 +95,7 @@ export class ProductResolver {
       {
         category: categoryEntity.id,
         id: { $ne: productId },
-        status: ProductStatus.ACTIVE, // ✅
+        status: ProductStatus.ACTIVE, // 
       },
       {
         populate: ["variations"],
@@ -140,13 +140,6 @@ export class ProductResolver {
   ): Promise<Product[]> {
     // const filters: any = { status: ProductStatus.ACTIVE }; // ✅
 
-    // if (categoryId) filters.category = categoryId;
-    // if (minPrice || maxPrice) {
-    //   filters.price = {};
-    //   if (minPrice) filters.price["$gte"] = minPrice;
-    //   if (maxPrice) filters.price["$lte"] = maxPrice;
-    // }
-    // if (material) filters.material = material;
 
     const filters: any = {
       status: ProductStatus.ACTIVE,

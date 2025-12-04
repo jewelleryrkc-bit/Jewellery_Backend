@@ -65,13 +65,18 @@ async function main() {
   app.set("trust proxy", 1);
 
   
-  app.use(
-    cors({
-      // origin: [process.env.APOLLO_CORS_ORIGIN!, process.env.NGROK_CORS_ORIGIN!],
-       origin: ["http://localhost:3000"],
-      credentials: true,
-    })
-  );
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+    credentials: true,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "ngrok-skip-browser-warning"
+    ],
+  })
+);
 
   // console.log(`CORS origin set to: ${corsOrigin}`);
 

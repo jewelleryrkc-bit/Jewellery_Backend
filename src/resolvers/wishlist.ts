@@ -6,6 +6,7 @@ import { User } from "../entities/User";
 import { WishlistItem } from "../entities/WishlistItem";
 import { ProductVariation } from "../entities/ProductVar";
 
+
 @Resolver()
 export class WishlistResolver {
   
@@ -18,7 +19,7 @@ export class WishlistResolver {
     const wishlist = await em.findOne(
       Wishlist,
       { user: req.session.userId },
-      { populate: ['items', 'items.product', 'items.variation'] }
+      { populate: ['items', 'items.product', 'items.variation','items.product.images', 'items.variation.images',] }
     );
 
     return wishlist;
