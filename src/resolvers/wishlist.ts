@@ -88,6 +88,93 @@ export class WishlistResolver {
       return wishlistItem;
     }
 
+
+@Mutation(() => WishlistItem, { nullable: true })
+  async toggleWishlist(
+    @Arg("productId") productId: string,
+    @Arg("variationId", () => String, { nullable: true }) variationId: string,
+    @Ctx() { em, req }: MyContext
+  ): Promise<WishlistItem | null> {
+    if (!req.session.userId) throw new Error("Not authenticated");
+
+    const userId = req.session.userId;
+
+    // Find or create wishlist
+    let wishlist = await em.findOne(Wishlist, { user: userId });
+    if (!wishlist) {
+      const user = await em.findOneOrFail(User, { id: userId });
+      wishlist = em.create(Wishlist, {
+        user,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await em.persistAndFlush(wishlist);
+    }
+
+    // Find product
+    const product = await em.findOneOrFail(Product, { id: productId });
+
+    // Check if wishlist item exists
+    const existingItem = await em.findOne(WishlistItem, {
+      wishlist: wishlist.id,
+      product: product.id,
+      ...(variationId && { variation: variationId }),
+    });
+
+    // REMOVE if exists
+    if (existingItem) {
+      await em.removeAndFlush(existingItem);
+      return null;
+    }
+
+    // ADD if not exists
+    const variation = variationId
+      ? await em.findOne(ProductVariation, { id: variationId })
+      : null;
+
+    const newItem = em.create(WishlistItem, {
+      product,
+      variation: variation || undefined,
+      price: variation?.price || product.price,
+      wishlist,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    wishlist.items.add(newItem);
+    wishlist.updatedAt = new Date();
+
+    await em.persistAndFlush(newItem);
+
+    return newItem;
+  
+}
+
+
+  @Mutation(()=> Boolean)
+    async removeWishlistItem(
+      @Arg("itemId", ()=> String) itemId: string,
+      @Ctx() { em, req }: MyContext
+    ):Promise<boolean>{
+      if (!req.session.userId) {
+        throw new Error("Not authenticated");
+      }
+      const userId = req.session.userId;
+      const wishlist = await em.findOne(Wishlist,{user:userId});
+      if(!wishlist) throw new Error("Wishlist not found");
+
+      const item = await em.findOne(WishlistItem,{id:itemId,wishlist:wishlist.id});
+
+      if(!item) throw new Error("Wishlist item not found");
+
+      await em.removeAndFlush(item);
+      wishlist.updatedAt = new Date();
+      await em.persistAndFlush(wishlist);
+      return true;
+
+    }
+  
+
   @Mutation(() => Boolean)
   async clearWishlist(
     @Ctx() { em, req }: MyContext
