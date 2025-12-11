@@ -100,47 +100,49 @@ async deleteProductImage(
   return true;
 }
 
-
-
-
   // -------------------------------------------------
   // UPDATE IMAGE (replace)
   // -------------------------------------------------
   @Mutation(() => ProductImage)
-  async updateProductImage(
-    @Arg("imageId") imageId: number,
-    @Arg("newUrl") newUrl: string,
-    @Ctx() { em, req }: MyContext
-  ) {
-    const vendorId = req.session.companyId;
-    const adminId = req.session.adminId;
+async updateProductImage(
+  @Arg("imageId") imageId: string,
+  @Arg("newUrl") newUrl: string,
+  @Ctx() { em, req }: MyContext
+): Promise<ProductImage> {
+  const vendorId = req.session.companyId;
+  const adminId = req.session.adminId;
 
-    if (!vendorId && !adminId)
-      throw new Error("Only vendors or admins can update images.");
-
-    const image = await em.findOne(
-      ProductImage,
-      { id: imageId },
-      { populate: ["product", "product.company", "variation", "variation.product"] }
-    );
-
-    if (!image) throw new Error("Image not found");
-
-    const product = image.product || (image.variation ? image.variation.product : null);
-
-    if (!product) throw new Error("Image not linked to any product");
-
-    if (vendorId && product.company.id !== vendorId)
-      throw new Error("You cannot update another vendor's product image");
-
-    // Delete old one from cloud
-    await this.uploader.delete(image.key);
-
-    // Replace with new one
-    image.url = newUrl;
-    image.key = newUrl; // using URL as key again
-
-    await em.flush();
-    return image;
+  if (!vendorId && !adminId) {
+    throw new Error("Only vendors or admins can update images.");
   }
+
+  // Load image with related product / company for permission checks
+  const image = await em.findOne(
+    ProductImage,
+    { id: parseInt(imageId, 10) },
+    { populate: ["product", "product.company", "variation", "variation.product"] }
+  );
+
+  if (!image) throw new Error("Image not found");
+
+  const product =
+    image.product || (image.variation ? image.variation.product : null);
+
+  if (!product) throw new Error("Image not linked to any product");
+
+  if (vendorId && product.company.id !== vendorId) {
+    throw new Error("You cannot update another vendor's product image");
+  }
+
+  // Delete old asset from cloud (key is current image.key)
+  await this.uploader.delete(image.key);
+
+  // Replace with new Cloudinary URL
+  image.url = newUrl;
+  image.key = newUrl; 
+
+  await em.flush();
+  return image;
+}
+
 }

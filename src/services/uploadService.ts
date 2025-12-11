@@ -38,6 +38,16 @@ export class UploadService {
   // UPLOAD SINGLE FILE (REST)
   // ------------------------
   static async uploadImage(file: Express.Multer.File) {
+
+  //   console.log("🔍 CLOUDINARY DEBUG:", {
+  //   cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? "✅ SET" : "❌ MISSING",
+  //   api_key: process.env.CLOUDINARY_API_KEY ? "✅ SET" : "❌ MISSING", 
+  //   api_secret: process.env.CLOUDINARY_API_SECRET ? "✅ SET" : "❌ MISSING",
+  //   provider: process.env.UPLOAD_PROVIDER
+  // });
+  
+  // console.log("📁 File buffer size:", file.buffer?.length || "NO BUFFER");
+
   return new Promise<{ url: string; key: string }>((resolve, reject) => {
     cloudinaryV2.uploader
       .upload_stream({ folder: "products" }, (error, result) => {

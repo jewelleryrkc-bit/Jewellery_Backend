@@ -19,7 +19,7 @@ export class WishlistResolver {
     const wishlist = await em.findOne(
       Wishlist,
       { user: req.session.userId },
-      { populate: ['items', 'items.product', 'items.variation','items.product.images', 'items.variation.images',] }
+      { populate: ['items', 'items.product',"items.product.category",'items.variation','items.product.images','items.variation.images',] }
     );
 
     return wishlist;

@@ -6,6 +6,7 @@ import { SellerCatInput } from "../inputs/sellerCategoryInput";
 import { MyContext } from "../types";
 import { Arg, Ctx, Field, Mutation, ObjectType, Query, Resolver } from "type-graphql";
 
+
 @ObjectType()
 class SellerCategoryResponse {
   @Field(() => [FieldError], { nullable: true })

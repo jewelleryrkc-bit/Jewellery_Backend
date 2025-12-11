@@ -126,7 +126,7 @@ export class ProductResolver {
     };
 
     return await em.find(Product, filters, {
-      populate: ["reviews", "variations", "category"],
+      populate: ["reviews", "variations", "category","images"],
     });
   }
 
@@ -170,9 +170,9 @@ export class ProductResolver {
     @Ctx() { em }: MyContext,
     @Arg("material", { nullable: true }) material?: string
   ): Promise<Product[]> {
-    const filters: any = { status: ProductStatus.ACTIVE }; // ✅
+    const filters: any = { status: ProductStatus.ACTIVE }; 
     if (material) filters.material = material;
-    return em.find(Product, filters, { populate: ["variations"] });
+    return em.find(Product, filters, { populate: ["variations","images"] });
   }
 
   @Query(() => [Product])
@@ -206,7 +206,7 @@ export class ProductResolver {
     };
 
     return await em.find(Product, filters, {
-      populate: ["category", "variations"],
+      populate: ["category", "variations","images"],
       orderBy: { averageRating: "DESC" },
     });
   }
@@ -515,7 +515,7 @@ export class ProductResolver {
         return em.find(
           Product,
           { category: category.id, status: ProductStatus.ACTIVE }, // ✅
-          { populate: ["variations", "category"] }
+          { populate: ["variations", "category","images"] }
         );
       },
       {
@@ -541,7 +541,7 @@ export class ProductResolver {
     const products = await em.find(Product, filters, {
       orderBy: { createdAt: "DESC" },
       limit: fetchLimit,
-      populate: ["category", "variations", "reviews"],
+      populate: ["category", "variations", "reviews","images"],
     });
 
     const hasMore = products.length === fetchLimit;
@@ -574,7 +574,7 @@ export class ProductResolver {
           offset,
           limit: realLimit,
           orderBy: { createdAt: "DESC" },
-          populate: ["category", "variations", "reviews"],
+          populate: ["category", "variations", "reviews","images"],
         }
       ),
       em.count(Product, { company: req.session.companyId }),
