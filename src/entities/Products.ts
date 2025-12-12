@@ -94,9 +94,16 @@ export class Product {
   @ManyToOne(() => Category, { nullable: true })
   subcategory?: Category;
 
-  @Field(() => [ProductVariation])
-  @OneToMany(() => ProductVariation, (variation) => variation.product)
-  variations = new Collection<ProductVariation>(this);
+@Field(() => [ProductVariation])  
+@OneToMany(() => ProductVariation, (variation) => variation.product, {
+  cascade: [Cascade.ALL, Cascade.REMOVE],
+  orphanRemoval: true,
+})
+variations = new Collection<ProductVariation>(this);
+
+@Field({ nullable: true })
+@Property({ nullable: true })
+deletedMessage?: string;
 
   @Field(() => Company)
   @ManyToOne(() => Company)
@@ -257,7 +264,8 @@ export class Product {
   @Field(() => [ProductImage])
   @OneToMany(() => ProductImage, (img) => img.product,{
     eager: true,
-    cascade: [Cascade.PERSIST],
+    cascade: [Cascade.ALL,Cascade.REMOVE] , 
+  orphanRemoval: true,  
   })
   images = new Collection<ProductImage>(this);
 }

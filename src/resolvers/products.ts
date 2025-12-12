@@ -24,6 +24,7 @@ import { Discount, DiscountType } from "../entities/Discount";
 // import { FileUpload, GraphQLUpload } from "graphql-upload-ts";
 import { UploadService } from "../services/uploadService";
 import { ProductImage } from "../entities/ProductImage";
+// import { CartItem } from "@entities/CartItem";
 // import { ProductImageInput } from "../inputs/ProductImageInput";
 
 @Resolver(() => Product)
@@ -448,6 +449,32 @@ export class ProductResolver {
     return true;
   }
 
+
+// ProductStatus already has ACTIVE / DISABLED
+
+@Mutation(() => Boolean)
+async deleteMultipleProducts(
+  @Arg("ids", () => [String]) ids: string[],
+  @Ctx() { em }: MyContext
+): Promise<boolean> {
+  try {
+    const products = await em.find(Product, { id: { $in: ids } });
+
+    for (const p of products) {
+      p.status = ProductStatus.DISABLED;        // hide from listings & seller panel
+      p.deletedMessage = "This product was removed by the seller."; // optional extra field
+    }
+
+    await em.flush();
+    return true;
+  } catch (e) {
+    console.error("deleteMultipleProducts error:", e);
+    return false;
+  }
+}
+
+
+
   @FieldResolver(() => [Review])
   async reviews(@Root() product: Product, @Ctx() { em }: MyContext) {
     await em.populate(product, ["reviews"]);
@@ -557,32 +584,31 @@ export class ProductResolver {
   }
 
   @Query(() => PaginatedProducts)
-  async paginatedMyProducts(
-    @Ctx() { em, req }: MyContext,
-    @Arg("offset", () => Int, { defaultValue: 0 }) offset: number,
-    @Arg("limit", () => Int, { defaultValue: 10 }) limit: number
-  ): Promise<PaginatedProducts> {
-    if (!req.session.companyId) throw new Error("Not authenticated");
+async paginatedMyProducts(
+  @Ctx() { em, req }: MyContext,
+  @Arg("offset", () => Int, { defaultValue: 0 }) offset: number,
+  @Arg("limit", () => Int, { defaultValue: 10 }) limit: number
+): Promise<PaginatedProducts> {
+  if (!req.session.companyId) throw new Error("Not authenticated");
 
-    const realLimit = Math.min(50, limit);
+  const realLimit = Math.min(50, limit);
 
-    const [products, total] = await Promise.all([
-      em.find(
-        Product,
-        { company: req.session.companyId },
-        {
-          offset,
-          limit: realLimit,
-          orderBy: { createdAt: "DESC" },
-          populate: ["category", "variations", "reviews","images"],
-        }
-      ),
-      em.count(Product, { company: req.session.companyId }),
-    ]);
+  const where = {
+    company: req.session.companyId,
+    status: ProductStatus.ACTIVE,   // 👈 only active products for seller list
+  };
 
-    return {
-      products,
-      total,
-    };
-  }
+  const [products, total] = await Promise.all([
+    em.find(Product, where, {
+      offset,
+      limit: realLimit,
+      orderBy: { createdAt: "DESC" },
+      populate: ["category", "variations", "reviews","images"],
+    }),
+    em.count(Product, where),
+  ]);
+
+  return { products, total };
+}
+
 }
