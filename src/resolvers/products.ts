@@ -96,7 +96,7 @@ export class ProductResolver {
       {
         category: categoryEntity.id,
         id: { $ne: productId },
-        status: ProductStatus.ACTIVE, // 
+        status: ProductStatus.ACTIVE, //
       },
       {
         populate: ["variations"],
@@ -127,7 +127,7 @@ export class ProductResolver {
     };
 
     return await em.find(Product, filters, {
-      populate: ["reviews", "variations", "category","images"],
+      populate: ["reviews", "variations", "category", "images"],
     });
   }
 
@@ -140,7 +140,6 @@ export class ProductResolver {
     @Arg("material", { nullable: true }) material?: string
   ): Promise<Product[]> {
     // const filters: any = { status: ProductStatus.ACTIVE }; // ✅
-
 
     const filters: any = {
       status: ProductStatus.ACTIVE,
@@ -171,9 +170,9 @@ export class ProductResolver {
     @Ctx() { em }: MyContext,
     @Arg("material", { nullable: true }) material?: string
   ): Promise<Product[]> {
-    const filters: any = { status: ProductStatus.ACTIVE }; 
+    const filters: any = { status: ProductStatus.ACTIVE };
     if (material) filters.material = material;
-    return em.find(Product, filters, { populate: ["variations","images"] });
+    return em.find(Product, filters, { populate: ["variations", "images"] });
   }
 
   @Query(() => [Product])
@@ -207,7 +206,7 @@ export class ProductResolver {
     };
 
     return await em.find(Product, filters, {
-      populate: ["category", "variations","images"],
+      populate: ["category", "variations", "images"],
       orderBy: { averageRating: "DESC" },
     });
   }
@@ -351,12 +350,17 @@ export class ProductResolver {
       throw new Error("At least one product image is required.");
     }
 
-    for (const imgData of input.images) {
+    for (let index = 0; index < input.images.length; index++) {
+      const imgData = input.images[index];
+
       const img = em.create(ProductImage, {
         url: imgData.url,
         key: imgData.key,
         product,
+        isPrimary: index === 0, // first image = primary
+        position: index, // 0,1,2,...
       });
+
       product.images.add(img);
       await em.persistAndFlush(img);
     }
@@ -425,6 +429,10 @@ export class ProductResolver {
 
     const uploader = new UploadService();
 
+    if (product.videoKey) {
+      await uploader.delete(product.videoKey);
+    }
+
     // Delete all product images from cloud
     for (const img of product.images) {
       await uploader.delete(img.key);
@@ -449,31 +457,28 @@ export class ProductResolver {
     return true;
   }
 
+  // ProductStatus already has ACTIVE / DISABLED
 
-// ProductStatus already has ACTIVE / DISABLED
+  @Mutation(() => Boolean)
+  async deleteMultipleProducts(
+    @Arg("ids", () => [String]) ids: string[],
+    @Ctx() { em }: MyContext
+  ): Promise<boolean> {
+    try {
+      const products = await em.find(Product, { id: { $in: ids } });
 
-@Mutation(() => Boolean)
-async deleteMultipleProducts(
-  @Arg("ids", () => [String]) ids: string[],
-  @Ctx() { em }: MyContext
-): Promise<boolean> {
-  try {
-    const products = await em.find(Product, { id: { $in: ids } });
+      for (const p of products) {
+        p.status = ProductStatus.DISABLED; // hide from listings & seller panel
+        p.deletedMessage = "This product was removed by the seller."; // optional extra field
+      }
 
-    for (const p of products) {
-      p.status = ProductStatus.DISABLED;        // hide from listings & seller panel
-      p.deletedMessage = "This product was removed by the seller."; // optional extra field
+      await em.flush();
+      return true;
+    } catch (e) {
+      console.error("deleteMultipleProducts error:", e);
+      return false;
     }
-
-    await em.flush();
-    return true;
-  } catch (e) {
-    console.error("deleteMultipleProducts error:", e);
-    return false;
   }
-}
-
-
 
   @FieldResolver(() => [Review])
   async reviews(@Root() product: Product, @Ctx() { em }: MyContext) {
@@ -542,7 +547,7 @@ async deleteMultipleProducts(
         return em.find(
           Product,
           { category: category.id, status: ProductStatus.ACTIVE }, // ✅
-          { populate: ["variations", "category","images"] }
+          { populate: ["variations", "category", "images"] }
         );
       },
       {
@@ -568,7 +573,7 @@ async deleteMultipleProducts(
     const products = await em.find(Product, filters, {
       orderBy: { createdAt: "DESC" },
       limit: fetchLimit,
-      populate: ["category", "variations", "reviews","images"],
+      populate: ["category", "variations", "reviews", "images"],
     });
 
     const hasMore = products.length === fetchLimit;
@@ -584,31 +589,30 @@ async deleteMultipleProducts(
   }
 
   @Query(() => PaginatedProducts)
-async paginatedMyProducts(
-  @Ctx() { em, req }: MyContext,
-  @Arg("offset", () => Int, { defaultValue: 0 }) offset: number,
-  @Arg("limit", () => Int, { defaultValue: 10 }) limit: number
-): Promise<PaginatedProducts> {
-  if (!req.session.companyId) throw new Error("Not authenticated");
+  async paginatedMyProducts(
+    @Ctx() { em, req }: MyContext,
+    @Arg("offset", () => Int, { defaultValue: 0 }) offset: number,
+    @Arg("limit", () => Int, { defaultValue: 10 }) limit: number
+  ): Promise<PaginatedProducts> {
+    if (!req.session.companyId) throw new Error("Not authenticated");
 
-  const realLimit = Math.min(50, limit);
+    const realLimit = Math.min(50, limit);
 
-  const where = {
-    company: req.session.companyId,
-    status: ProductStatus.ACTIVE,   // 👈 only active products for seller list
-  };
+    const where = {
+      company: req.session.companyId,
+      status: ProductStatus.ACTIVE, // 👈 only active products for seller list
+    };
 
-  const [products, total] = await Promise.all([
-    em.find(Product, where, {
-      offset,
-      limit: realLimit,
-      orderBy: { createdAt: "DESC" },
-      populate: ["category", "variations", "reviews","images"],
-    }),
-    em.count(Product, where),
-  ]);
+    const [products, total] = await Promise.all([
+      em.find(Product, where, {
+        offset,
+        limit: realLimit,
+        orderBy: { createdAt: "DESC" },
+        populate: ["category", "variations", "reviews", "images"],
+      }),
+      em.count(Product, where),
+    ]);
 
-  return { products, total };
-}
-
+    return { products, total };
+  }
 }

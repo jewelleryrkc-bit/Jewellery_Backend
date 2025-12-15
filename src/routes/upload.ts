@@ -34,4 +34,21 @@ router.post("/images", upload.array("images"), async (req, res) => {
   }
 });
 
+router.post("/video", upload.single("video"), async (req, res) => {
+  try {
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    // optional: size/type checks here before upload
+
+    const result = await UploadService.uploadVideo(file); // { url, key }
+    return res.json({ video: result });
+  } catch (err) {
+    console.error("VIDEO UPLOAD ERROR:", err);
+    return res.status(500).json({ error: "Upload failed" });
+  }
+});
+
 export default router;

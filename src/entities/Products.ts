@@ -268,4 +268,12 @@ deletedMessage?: string;
   orphanRemoval: true,  
   })
   images = new Collection<ProductImage>(this);
+
+@Field({ nullable: true })
+@Property({ nullable: true })
+videoUrl?: string;  
+
+@Field({ nullable: true })
+@Property({ nullable: true })
+videoKey?: string;
 }
