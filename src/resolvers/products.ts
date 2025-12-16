@@ -7,6 +7,8 @@ import {
   Int,
   FieldResolver,
   Root,
+  InputType,
+  Field,
 } from "type-graphql";
 import { MyContext } from "../types";
 import { Product, ProductStatus } from "../entities/Products";
@@ -27,6 +29,15 @@ import { ProductImage } from "../entities/ProductImage";
 // import { CartItem } from "@entities/CartItem";
 // import { ProductImageInput } from "../inputs/ProductImageInput";
 
+@InputType()
+class ProductImageUpdateInput {
+ @Field(() => [Number])
+  imageOrder!: number[];
+
+  @Field(() => Number)
+  primaryImageId!: number;
+}
+
 @Resolver(() => Product)
 export class ProductResolver {
   @Query(() => Product, { nullable: true })
@@ -38,32 +49,44 @@ export class ProductResolver {
     const index = `product:${id}`;
 
     return getOrSetCache(
-      () => {
-        return em.findOne(
+      async () => {
+        const p = await em.findOne(
           Product,
           { id, status: ProductStatus.ACTIVE },
-          { populate: ["variations", "category", "reviews.user", "company"] }
+          { populate: ["variations", "category", "reviews.user", "company", "images"] }
         );
+        if (!p) return null;
+
+        // SORT IMAGES: isPrimary first, then by position
+        p.images.set(
+          p.images.getItems().sort((a, b) => {
+            if (a.isPrimary === b.isPrimary) return a.position - b.position;
+            return a.isPrimary ? -1 : 1;
+          })
+        );
+
+        return p;
       },
-      {
-        key,
-        ttl: 300,
-        index,
-        validate: (data) => !!data && !!data.id,
-      }
+      { key, ttl: 300, index, validate: (data) => !!data && !!data.id }
     );
   }
 
   @Query(() => [Product])
   async myProducts(@Ctx() { em, req }: MyContext): Promise<Product[]> {
     if (!req.session.companyId) throw new Error("Not authenticated");
-    return await em.find(
-      Product,
-      { company: req.session.companyId },
-      {
-        populate: ["reviews", "variations", "company"],
-      }
-    );
+    const products = await em.find(Product, { company: req.session.companyId }, { populate: ["reviews", "variations", "company", "images"] });
+
+    // SORT IMAGES
+    products.forEach((p) => {
+      p.images.set(
+        p.images.getItems().sort((a, b) => {
+          if (a.isPrimary === b.isPrimary) return a.position - b.position;
+          return a.isPrimary ? -1 : 1;
+        })
+      );
+    });
+
+    return products;
   }
 
   @Query(() => Product, { nullable: true })
@@ -134,35 +157,22 @@ export class ProductResolver {
   @Query(() => [Product])
   async allProducts(
     @Ctx() { em }: MyContext,
-    @Arg("category", { nullable: true }) categoryId?: string,
-    @Arg("minPrice", { nullable: true }) minPrice?: number,
-    @Arg("maxPrice", { nullable: true }) maxPrice?: number,
-    @Arg("material", { nullable: true }) material?: string
+    @Arg("category", { nullable: true }) categoryId?: string
   ): Promise<Product[]> {
-    // const filters: any = { status: ProductStatus.ACTIVE }; // ✅
+    const filters: any = { status: ProductStatus.ACTIVE, ...(categoryId && { category: categoryId }) };
+    const products = await em.find(Product, filters, { populate: ["variations", "images", "category"] });
 
-    const filters: any = {
-      status: ProductStatus.ACTIVE,
-      ...(categoryId && { category: categoryId }),
-      ...(material && { material }),
-      ...((minPrice !== undefined || maxPrice !== undefined) && {
-        price: {
-          ...(minPrice !== undefined && { $gte: minPrice }),
-          ...(maxPrice !== undefined && { $lte: maxPrice }),
-        },
-      }),
-    };
-
-    return await em.find(Product, filters, {
-      populate: [
-        "variations",
-        "images",
-        "category",
-        "subcategory",
-        "discount",
-        "discountedPrice",
-      ],
+    // SORT IMAGES
+    products.forEach((p) => {
+      p.images.set(
+        p.images.getItems().sort((a, b) => {
+          if (a.isPrimary === b.isPrimary) return a.position - b.position;
+          return a.isPrimary ? -1 : 1;
+        })
+      );
     });
+
+    return products;
   }
 
   @Query(() => [Product])
@@ -286,6 +296,7 @@ export class ProductResolver {
       averageRating: 0,
       soldCount: 0,
       reviewCount: 0,
+       wishlistCount: 0,
       variations: [],
       images: [],
       createdAt: new Date(),
@@ -367,6 +378,41 @@ export class ProductResolver {
 
     return product;
   }
+
+@Mutation(() => Product)
+async updateProductImages(
+  @Arg("productId") productId: string,
+  @Arg("input") input: ProductImageUpdateInput, 
+  @Ctx() { em, req }: MyContext
+): Promise<Product> {
+  if (!req.session.companyId) throw new Error("Not authenticated");
+
+  const product = await em.findOne(
+    Product,
+    { id: productId },
+    { populate: ["images", "company"] }
+  );
+  if (!product) throw new Error("Product not found");
+
+  // 🔐 vendor safety
+  if (product.company.id !== req.session.companyId) {
+    throw new Error("You cannot edit another vendor's product images.");
+  }
+
+  // ✅ CHANGE: ensure exactly ONE primary image
+  product.images.getItems().forEach((img) => {
+    img.isPrimary = img.id === input.primaryImageId;
+  });
+
+  // ✅ CHANGE: update ordering (drag & drop support)
+  input.imageOrder.forEach((imgId, index) => {
+    const img = product.images.getItems().find((i) => i.id === imgId);
+    if (img) img.position = index;
+  });
+
+  await em.flush();
+  return product;
+}
 
   @Mutation(() => Product)
   async updateProducts(
@@ -486,52 +532,59 @@ export class ProductResolver {
     return product.reviews;
   }
 
-  @Query(() => Product, { nullable: true })
-  async productBySlug(
-    @Arg("slug") slug: string,
-    @Ctx() { em }: MyContext
-  ): Promise<Product | null> {
-    console.log(`🔍 [RESOLVER] ProductBySlug called with slug: ${slug}`);
+ @Query(() => Product, { nullable: true })
+async productBySlug(
+  @Arg("slug") slug: string,
+  @Ctx() { em }: MyContext
+): Promise<Product | null> {
+  console.log(`🔍 [RESOLVER] ProductBySlug called with slug: ${slug}`);
 
-    const key = `product:slug:${slug}`;
-    const index = `product:${slug}`;
+  const key = `product:slug:${slug}`;
+  const index = `product:${slug}`;
 
-    return getOrSetCache(
-      () => {
-        console.log(`📦 [RESOLVER] Fetching product from DB for slug: ${slug}`);
+  return getOrSetCache(
+    async () => {
+      console.log(`[RESOLVER] Fetching product from DB for slug: ${slug}`);
 
-        return em.findOne(
-          Product,
-          { slug, status: ProductStatus.ACTIVE },
-          {
-            populate: [
-              "variations",
-              "category",
-              "company",
-              "reviews",
-              "discount",
-              "discountedPrice",
-            ],
-          }
-        );
-      },
-      {
-        key,
-        ttl: 300,
-        index,
-        validate: (data) => !!data && !!data.id, // make sure it's not null and has ID
-      }
-    );
-  }
+      const p = await em.findOne(
+        Product,
+        { slug, status: ProductStatus.ACTIVE },
+        {
+          populate: [
+            "variations",
+            "category",
+            "company",
+            "reviews",
+            "reviews.user",
+            "discount",
+            "discountedPrice",
+            "images",              // ✅ add images here
+          ],
+        }
+      );
 
-  // @Query(() => Product, { nullable: true })
-  //   async productBySlug(@Arg("slug") slug: string, @Ctx() { em }: MyContext): Promise<Product | null> {
-  //     return await em.findOne(
-  //       Product,
-  //       { slug, status: ProductStatus.ACTIVE }, // ✅
-  //       { populate: ['variations', 'category', 'company',"reviews", 'reviews.user'] }
-  //     );
-  //   }
+      if (!p) return null;
+
+      // ✅ ensure primary image first, then by position
+      p.images.set(
+        p.images.getItems().sort((a, b) => {
+          if (a.isPrimary === b.isPrimary) return a.position - b.position;
+          return a.isPrimary ? -1 : 1;
+        })
+      );
+
+      return p;
+    },
+    {
+      key,
+      ttl: 300,
+      index,
+      validate: (data) => !!data && !!data.id,
+    }
+  );
+}
+
+
 
   @Query(() => [Product])
   async productsByCategory(

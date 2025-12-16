@@ -246,6 +246,11 @@ deletedMessage?: string;
   @Property({ default: ProductStatus.ACTIVE })
   status: ProductStatus = ProductStatus.ACTIVE;
 
+  @Field(() => Int)
+@Property({ type: "int", default: 0 })
+wishlistCount: number = 0;
+
+
   @BeforeCreate()
   generateSlug() {
     if (!this.slug) {

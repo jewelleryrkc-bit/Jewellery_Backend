@@ -36,6 +36,14 @@ export class User {
   @OneToMany(() => UserAddress, (address) => address.user)
   addresses = new Collection<UserAddress>(this);
 
+  @Field()
+@Property()
+name!: string;
+
+@Field({ nullable: true })
+@Property({ nullable: true })
+avatar?: string;
+
   @Field(() => String, { nullable: true })
   @Property({ nullable: true })
   ip?: string;

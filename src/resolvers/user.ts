@@ -62,6 +62,10 @@ class RegisterInput {
 
   @Field()
   contact!: number;
+
+  @Field({ nullable: true })
+name?: string;
+
 }
 
 @InputType()
@@ -216,14 +220,14 @@ export class UserResolver {
     const hashedPassword = await argon2.hash(options.password);
     const user = em.create(User, {
       username: options.username,
-      password: hashedPassword,
-      contact: options.contact,
       email: options.email,
-      addresses: [],
+      password: hashedPassword,
+      name: options.name || options.username, // fallback to username
       isEmailVerified: false,
       isPhoneVerified: false,
       createdAt: new Date(),
       updatedAt: new Date(),
+      contact: 0
     });
     await em.persistAndFlush(user);
 

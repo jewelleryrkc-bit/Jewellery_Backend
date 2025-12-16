@@ -49,6 +49,7 @@ export class WishlistResolver {
       }
 
       const product = await em.findOneOrFail(Product, { id: productId });
+     
 
       let variation: ProductVariation | null = null;
       let price = product.price;
@@ -90,65 +91,81 @@ export class WishlistResolver {
 
 
 @Mutation(() => WishlistItem, { nullable: true })
-  async toggleWishlist(
-    @Arg("productId") productId: string,
-    @Arg("variationId", () => String, { nullable: true }) variationId: string,
-    @Ctx() { em, req }: MyContext
-  ): Promise<WishlistItem | null> {
-    if (!req.session.userId) throw new Error("Not authenticated");
+async toggleWishlist(
+  @Arg("productId") productId: string,
+  @Arg("variationId", () => String, { nullable: true }) variationId: string,
+  @Ctx() { em, req }: MyContext
+): Promise<WishlistItem | null> {
+  if (!req.session.userId) throw new Error("Not authenticated");
 
-    const userId = req.session.userId;
+  const userId = req.session.userId;
 
-    // Find or create wishlist
-    let wishlist = await em.findOne(Wishlist, { user: userId });
-    if (!wishlist) {
-      const user = await em.findOneOrFail(User, { id: userId });
-      wishlist = em.create(Wishlist, {
-        user,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      await em.persistAndFlush(wishlist);
-    }
-
-    // Find product
-    const product = await em.findOneOrFail(Product, { id: productId });
-
-    // Check if wishlist item exists
-    const existingItem = await em.findOne(WishlistItem, {
-      wishlist: wishlist.id,
-      product: product.id,
-      ...(variationId && { variation: variationId }),
-    });
-
-    // REMOVE if exists
-    if (existingItem) {
-      await em.removeAndFlush(existingItem);
-      return null;
-    }
-
-    // ADD if not exists
-    const variation = variationId
-      ? await em.findOne(ProductVariation, { id: variationId })
-      : null;
-
-    const newItem = em.create(WishlistItem, {
-      product,
-      variation: variation || undefined,
-      price: variation?.price || product.price,
-      wishlist,
+  // Find or create wishlist
+  let wishlist = await em.findOne(Wishlist, { user: userId });
+  if (!wishlist) {
+    const user = await em.findOneOrFail(User, { id: userId });
+    wishlist = em.create(Wishlist, {
+      user,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    await em.persistAndFlush(wishlist);
+  }
 
-    wishlist.items.add(newItem);
+  // Find product (with wishlistCount)
+  const product = await em.findOneOrFail(Product, 
+  { id: productId },
+  { populate: ["category", "images"] }  // add others if needed
+);
+// const product = await em.findOneOrFail(Product, { id: productId });
+
+
+
+  // Check if wishlist item exists
+  const existingItem = await em.findOne(WishlistItem, {
+    wishlist: wishlist.id,
+    product: product.id,
+    ...(variationId && { variation: variationId }),
+  });
+
+  // REMOVE if exists
+  if (existingItem) {
+    await em.removeAndFlush(existingItem);
+
+    // 🔴 decrement count (never below 0)
+    product.wishlistCount = Math.max(0, (product.wishlistCount || 0) - 1);
     wishlist.updatedAt = new Date();
+    await em.flush();
 
-    await em.persistAndFlush(newItem);
+    return null;
+  }
 
-    return newItem;
-  
+  // ADD if not exists
+  const variation = variationId
+    ? await em.findOne(ProductVariation, { id: variationId })
+    : null;
+
+  const newItem = em.create(WishlistItem, {
+    product,
+    variation: variation || undefined,
+    price: variation?.price || product.price,
+    wishlist,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  wishlist.items.add(newItem);
+  wishlist.updatedAt = new Date();
+
+  // 🟢 increment count
+  product.wishlistCount = (product.wishlistCount || 0) + 1;
+
+  await em.persistAndFlush(newItem);
+  await em.flush();
+
+  return newItem;
 }
+
 
 
   @Mutation(()=> Boolean)

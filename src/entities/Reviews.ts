@@ -10,12 +10,20 @@ export class Review {
   @PrimaryKey({ type: "uuid" })
   id: string = crypto.randomUUID();
 
-  @Field(() => User, { nullable: true })
-  @ManyToOne(() => User, { nullable: true })
+ // Keep optional relation for backend flexibility
+   @Field(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true })   // ← ORM relation + nullable
   user?: User;
 
-  // @Property({nullable: true, hidden: true})
-  // limit?: number;
+  // ⚡ New: snapshot of user's name at creation time
+  @Field(() => String)
+  @Property({ type: "text" })
+  authorName!: string;
+
+  // ⚡ Optional: snapshot of user's avatar (if available)
+  @Field(() => String, { nullable: true })
+  @Property({ type: "text", nullable: true })
+  authorAvatar?: string;
 
   @Field(() => [Int], { nullable: true })
   @Property({ type: 'integer[]', nullable: true })
