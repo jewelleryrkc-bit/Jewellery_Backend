@@ -296,7 +296,7 @@ export class ProductResolver {
       averageRating: 0,
       soldCount: 0,
       reviewCount: 0,
-       wishlistCount: 0,
+      wishlistCount: 0,
       variations: [],
       images: [],
       createdAt: new Date(),
