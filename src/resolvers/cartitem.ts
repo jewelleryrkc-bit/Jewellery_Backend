@@ -1,5 +1,5 @@
 // src/resolvers/CartResolver.ts
-import { Resolver, Mutation, Arg, Ctx, Query } from "type-graphql";
+import { Resolver, Mutation, Arg, Ctx, Query, ID } from "type-graphql";
 import { MyContext } from "../types";
 import { Cart } from "../entities/Cart";
 import { CartItem } from "../entities/CartItem";
@@ -16,11 +16,6 @@ export class CartResolver {
       if (!req.session.userId) {
         throw new Error("Not authenticated");
       }
-
-        // const cart = await em.findOne(Cart, 
-        //   { user: req.session.userId }, 
-        //   { populate: ['items', 'items.product', 'items.variation'] }
-        // );
 
         const cart = await em.findOne(Cart, 
           { user: req.session.userId }, 
@@ -67,23 +62,7 @@ export class CartResolver {
     return cart;
   }
 
-  // @Query(()=> Cart, { nullable: true })
-  //  async getCart(
-  //   @Ctx() { em, req }: 
-  //   MyContext): Promise<Cart| null>{
-  //   const key = `cart:User's-cart`;
-  //   return getOrSetCache(() => {
-  //     return em.findOne(
-  //       Cart,
-  //       { user: req.session.userId },
-  //       { populate: ['user', 'items', 'items.product', 'items.variation', 'user.addresses']}
-  //     );
-  //   }, {
-  //     key,
-  //     ttl: 300,
-  //     index: 'cart:users-cart'
-  //   });
-  //  }
+  
 
   @Mutation(() => CartItem)
     async addToCart(
@@ -194,4 +173,83 @@ export class CartResolver {
       }
       return true;
     }
+
+      @Mutation(() => Cart)
+  async removeFromCart(
+    @Arg("itemId", () => ID) itemId: string,
+    @Ctx() { em, req }: MyContext
+  ): Promise<Cart> {
+    if (!req.session.userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Find the cart item and its cart
+    const cartItem = await em.findOne(
+      CartItem,
+      { id: itemId },
+      { populate: ["cart", "cart.user"] }
+    );
+
+    if (!cartItem) {
+      throw new Error("Cart item not found");
+    }
+
+    // Security: ensure this cart belongs to the current user
+    if (cartItem.cart.user.id !== req.session.userId) {
+      throw new Error("Not authorized to modify this cart");
+    }
+
+    const cart = cartItem.cart;
+
+    // Remove the item
+    await em.removeAndFlush(cartItem);
+
+    // Re-populate cart relations so GraphQL can return updated data
+    await em.populate(cart, [
+      "user",
+      "items",
+      "items.product",
+      "items.variation",
+      "user.addresses",
+      "discountCoupon",
+    ]);
+
+    return cart;
+  }
+
+
+ @Mutation(() => CartItem)
+async updateCartItem(
+  @Arg("itemId", () => ID) itemId: string,
+  @Arg("quantity", () => Number) quantity: number,
+  @Ctx() { em, req }: MyContext
+): Promise<CartItem> {
+  if (!req.session.userId) {
+    throw new Error("Not authenticated");
+  }
+
+  if (quantity <= 0) {
+    throw new Error("Quantity must be greater than 0");
+  }
+
+  const cartItem = await em.findOne(
+    CartItem,
+    { id: itemId },
+    { populate: ["cart", "cart.user", "product", "variation"] }
+  );
+
+  if (!cartItem) {
+    throw new Error("Cart item not found");
+  }
+
+  if (cartItem.cart.user.id !== req.session.userId) {
+    throw new Error("Not authorized to modify this cart");
+  }
+
+  cartItem.quantity = quantity;
+  await em.persistAndFlush(cartItem);
+
+  return cartItem;
+}
+
 }
