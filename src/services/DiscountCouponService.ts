@@ -3,7 +3,7 @@ import { DiscountCoupon, DiscountUsage } from '../entities/DiscountCoupon';
 import { Company } from '../entities/Company';
 import { Service } from 'typedi';
 
-export class DiscountService {
+export class DiscountCouponService {
   constructor(private readonly em: EntityManager) {}
   @Service()
   async generateCoupon(

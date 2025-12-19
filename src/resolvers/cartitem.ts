@@ -1,5 +1,5 @@
 // src/resolvers/CartResolver.ts
-import { Resolver, Mutation, Arg, Ctx, Query, ID } from "type-graphql";
+import { Resolver, Mutation, Arg, Ctx, Query, ID, UseMiddleware } from "type-graphql";
 import { MyContext } from "../types";
 import { Cart } from "../entities/Cart";
 import { CartItem } from "../entities/CartItem";
@@ -7,54 +7,79 @@ import { Product } from "../entities/Products";
 import { ProductVariation } from "../entities/ProductVar";
 import { User } from "../entities/User";
 import { DiscountCoupon } from "../entities/DiscountCoupon";
+import { DiscountCouponService } from "../services/DiscountCouponService";
+import { UserAddress } from "../entities/UserAddress";
+import { isAuth } from "../middleware/isAuth";
+
+
 // import { getOrSetCache } from "../utils/cache";
 
 @Resolver(() => Cart)
 export class CartResolver {
   @Query(() => Cart, { nullable: true })
-    async getCart(@Ctx() { em, req }: MyContext): Promise<Cart | null> {
-      if (!req.session.userId) {
-        throw new Error("Not authenticated");
+  async getCart(@Ctx() { em, req }: MyContext): Promise<Cart | null> {
+    if (!req.session.userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const cart = await em.findOne(
+      Cart,
+      { user: req.session.userId },
+      {
+        populate: [
+          "user",
+          "items",
+          "items.product",
+          "items.variation",
+          "user.addresses",
+        ],
       }
+    );
 
-        const cart = await em.findOne(Cart, 
-          { user: req.session.userId }, 
-          { populate: ['user', 'items', 'items.product', 'items.variation', 'user.addresses'] }
-        );
-  
+    if (!cart) return null;
 
-      return cart;
+    cart.sellerProvidesShipping = false;
+    cart.shippingAmount = 0;
+
+    const couponService = new DiscountCouponService(em);
+    const coupons = await couponService.getCompanyCoupons(
+      cart.items[0]?.product.company.id,
+      true
+    );
+
+    cart.availableCoupons = coupons;
+
+    return cart;
   }
-  
+
   // src/resolvers/CartResolver.ts
-@Mutation(() => Cart)
+  @Mutation(() => Cart)
   async applyCouponToCart(
-    @Arg('code') code: string,
+    @Arg("code") code: string,
     @Ctx() { em, req }: MyContext
   ): Promise<Cart> {
     const cart = await em.findOneOrFail(Cart, { user: req.session.userId });
     const coupon = await em.findOne(DiscountCoupon, { code });
-    
+
     if (!coupon) throw new Error("Invalid coupon code");
-    
+
     // Validate coupon
     const now = new Date();
     if (now < coupon.startDate) throw new Error("Coupon not yet valid");
     if (now > coupon.endDate) throw new Error("Coupon has expired");
-    if (coupon.currentUsage >= coupon.usageLimit) throw new Error("Coupon usage limit reached");
+    if (coupon.currentUsage >= coupon.usageLimit)
+      throw new Error("Coupon usage limit reached");
 
     // Apply to cart
     cart.discountCoupon = coupon;
     cart.discountAmount = coupon.discountPercentage;
     await em.persistAndFlush(cart);
-    
+
     return cart;
   }
 
-@Mutation(() => Cart)
-  async removeCouponFromCart(
-    @Ctx() { em, req }: MyContext
-  ): Promise<Cart> {
+  @Mutation(() => Cart)
+  async removeCouponFromCart(@Ctx() { em, req }: MyContext): Promise<Cart> {
     const cart = await em.findOneOrFail(Cart, { user: req.session.userId });
     cart.discountCoupon = undefined;
     cart.discountAmount = undefined;
@@ -62,93 +87,99 @@ export class CartResolver {
     return cart;
   }
 
-  
-
   @Mutation(() => CartItem)
-    async addToCart(
-      @Arg("productId") productId: string,
-      @Arg("quantity", () => Number) quantity: number,
-      @Arg("variationId", { nullable: true }) variationId: string,
-      @Ctx() { em, req }: MyContext
-    ): Promise<CartItem> {
-      if (!req.session.userId) {
-        throw new Error("Not authenticated");
-      }
-
-      const userId = req.session.userId;
-
-      // Fetch or create cart
-      let cart = await em.findOne(Cart, { user: userId });
-      if (!cart) {
-        const user = await em.findOneOrFail(User, { id: userId });
-        cart = em.create(Cart, {
-          user,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          total: 0,
-          subtotal: 0
-        });
-        await em.persistAndFlush(cart);
-      }
-
-      const product = await em.findOneOrFail(Product, { id: productId }, { populate: ['variations']});
-
-      let variation: ProductVariation | null = null;
-      let price = product.price;
-      if(product.discountedPrice){
-        price = product.discountedPrice
-      }
-      let size: string | undefined;
-
-      if (variationId) {
-        variation = await em.findOneOrFail(ProductVariation, { id: variationId });
-        if (variation.product.id !== product.id) {
-          throw new Error("Variation does not belong to the product");
-        }
-        price = variation.price;
-        size = variation.size;
-      }
-
-      // Check for existing item
-      const existingItem = await em.findOne(CartItem, {
-        cart: cart.id,
-        product: product.id,
-        variation: variation ?? null
-      });
-
-      if (existingItem) {
-        existingItem.quantity += quantity;
-        await em.persistAndFlush(existingItem);
-        return existingItem;
-      }
-
-      const cartItem = em.create(CartItem, {
-        product,
-        variation: variation || undefined,
-        quantity,
-        price,
-        size,
-        cart,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      cart.items.add(cartItem);
-      await em.persistAndFlush(cartItem);
-
-      return cartItem;
-    }
-
-
-  @Mutation(() => Boolean)
-  async clearCart(
+  async addToCart(
+    @Arg("productId") productId: string,
+    @Arg("quantity", () => Number) quantity: number,
+    @Arg("variationId", { nullable: true }) variationId: string,
     @Ctx() { em, req }: MyContext
-  ): Promise<boolean> {
+  ): Promise<CartItem> {
     if (!req.session.userId) {
       throw new Error("Not authenticated");
     }
 
-    const cart = await em.findOne(Cart, { user: req.session.userId }, { populate: ['items'] });
+    const userId = req.session.userId;
+
+    // Fetch or create cart
+    let cart = await em.findOne(Cart, { user: userId });
+    if (!cart) {
+      const user = await em.findOneOrFail(User, { id: userId });
+      cart = em.create(Cart, {
+        user,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        total: 0,
+        subtotal: 0,
+        shippingAmount: 0,
+        sellerProvidesShipping: false,
+        availableCoupons: [],
+      });
+      await em.persistAndFlush(cart);
+    }
+
+    const product = await em.findOneOrFail(
+      Product,
+      { id: productId },
+      { populate: ["variations"] }
+    );
+
+    let variation: ProductVariation | null = null;
+    let price = product.price;
+    if (product.discountedPrice) {
+      price = product.discountedPrice;
+    }
+    let size: string | undefined;
+
+    if (variationId) {
+      variation = await em.findOneOrFail(ProductVariation, { id: variationId });
+      if (variation.product.id !== product.id) {
+        throw new Error("Variation does not belong to the product");
+      }
+      price = variation.price;
+      size = variation.size;
+    }
+
+    // Check for existing item
+    const existingItem = await em.findOne(CartItem, {
+      cart: cart.id,
+      product: product.id,
+      variation: variation ?? null,
+    });
+
+    if (existingItem) {
+      existingItem.quantity += quantity;
+      await em.persistAndFlush(existingItem);
+      return existingItem;
+    }
+
+    const cartItem = em.create(CartItem, {
+      product,
+      variation: variation || undefined,
+      quantity,
+      price,
+      size,
+      cart,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    cart.items.add(cartItem);
+    await em.persistAndFlush(cartItem);
+
+    return cartItem;
+  }
+
+  @Mutation(() => Boolean)
+  async clearCart(@Ctx() { em, req }: MyContext): Promise<boolean> {
+    if (!req.session.userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const cart = await em.findOne(
+      Cart,
+      { user: req.session.userId },
+      { populate: ["items"] }
+    );
     if (!cart) throw new Error("Cart not found");
 
     await em.removeAndFlush(cart.items.getItems());
@@ -156,25 +187,26 @@ export class CartResolver {
   }
 
   @Query(() => Boolean)
-    async isCartReadyForCheckout(
-      @Ctx() { em, req }: MyContext
-    ): Promise<boolean> {
-      if (!req.session.userId) {
-        throw new Error("Not authenticated");
-      }
-
-      const cart = await em.findOne(Cart, 
-        { user: req.session.userId }, 
-        { populate: ['items'] }
-      );
-
-      if (!cart || cart.items.length === 0) {
-        return false;
-      }
-      return true;
+  async isCartReadyForCheckout(
+    @Ctx() { em, req }: MyContext
+  ): Promise<boolean> {
+    if (!req.session.userId) {
+      throw new Error("Not authenticated");
     }
 
-      @Mutation(() => Cart)
+    const cart = await em.findOne(
+      Cart,
+      { user: req.session.userId },
+      { populate: ["items"] }
+    );
+
+    if (!cart || cart.items.length === 0) {
+      return false;
+    }
+    return true;
+  }
+
+  @Mutation(() => Cart)
   async removeFromCart(
     @Arg("itemId", () => ID) itemId: string,
     @Ctx() { em, req }: MyContext
@@ -217,39 +249,54 @@ export class CartResolver {
     return cart;
   }
 
+  @Mutation(() => CartItem)
+  async updateCartItem(
+    @Arg("itemId", () => ID) itemId: string,
+    @Arg("quantity", () => Number) quantity: number,
+    @Ctx() { em, req }: MyContext
+  ): Promise<CartItem> {
+    if (!req.session.userId) {
+      throw new Error("Not authenticated");
+    }
 
- @Mutation(() => CartItem)
-async updateCartItem(
-  @Arg("itemId", () => ID) itemId: string,
-  @Arg("quantity", () => Number) quantity: number,
+    if (quantity <= 0) {
+      throw new Error("Quantity must be greater than 0");
+    }
+
+    const cartItem = await em.findOne(
+      CartItem,
+      { id: itemId },
+      { populate: ["cart", "cart.user", "product", "variation"] }
+    );
+
+    if (!cartItem) {
+      throw new Error("Cart item not found");
+    }
+
+    if (cartItem.cart.user.id !== req.session.userId) {
+      throw new Error("Not authorized to modify this cart");
+    }
+
+    cartItem.quantity = quantity;
+    await em.persistAndFlush(cartItem);
+
+    return cartItem;
+  }
+
+@UseMiddleware(isAuth)
+@Mutation(() => Cart)
+async setCartShippingAddress(
+  @Arg("addressId", () => ID) addressId: string,
   @Ctx() { em, req }: MyContext
-): Promise<CartItem> {
-  if (!req.session.userId) {
-    throw new Error("Not authenticated");
-  }
+): Promise<Cart> {
+  const userId = req.session.userId;
+  if (!userId) throw new Error("Not authenticated");
 
-  if (quantity <= 0) {
-    throw new Error("Quantity must be greater than 0");
-  }
+  const cart = await em.findOneOrFail(Cart, { user: userId });
+  const address = await em.findOneOrFail(UserAddress, { id: addressId, user: userId });
 
-  const cartItem = await em.findOne(
-    CartItem,
-    { id: itemId },
-    { populate: ["cart", "cart.user", "product", "variation"] }
-  );
-
-  if (!cartItem) {
-    throw new Error("Cart item not found");
-  }
-
-  if (cartItem.cart.user.id !== req.session.userId) {
-    throw new Error("Not authorized to modify this cart");
-  }
-
-  cartItem.quantity = quantity;
-  await em.persistAndFlush(cartItem);
-
-  return cartItem;
+  cart.shippingAddress = address;
+  await em.flush();
+  return cart;
 }
-
 }
