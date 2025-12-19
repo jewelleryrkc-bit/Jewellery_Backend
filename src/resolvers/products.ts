@@ -272,14 +272,25 @@ export class ProductResolver {
     if (!company) throw new Error("Vendor/Company not found!");
 
     // Validate categories
-    const category = await em.findOne(Category, { id: input.category });
-    // const subcategory = await em.findOne(Category, { id: input.subcategory });
-    if (!category) throw new Error("Invalid category.");
-    let subcategory: Category | null = null;
-    if (input.subcategory) {
-      subcategory = await em.findOne(Category, { id: input.subcategory });
-      if (!subcategory) throw new Error("Invalid subcategory.");
-    }
+ const categoryId = input.categoryId ?? input.category;
+const subcategoryId = input.subcategoryId ?? input.subcategory;
+
+let category: Category | undefined;
+let subcategory: Category | undefined;
+
+if (categoryId) {
+  const cat = await em.findOne(Category, { id: categoryId });
+  if (!cat) throw new Error("Invalid category.");
+  category = cat;
+}
+
+if (subcategoryId) {
+  const sub = await em.findOne(Category, { id: subcategoryId });
+  if (!sub) throw new Error("Invalid subcategory.");
+  subcategory = sub;
+}
+
+
 
     // Slug
     const baseSlug = slugify(input.name, { lower: true, strict: true });
@@ -287,22 +298,26 @@ export class ProductResolver {
     const finalSlug = `${baseSlug}-${uuidSuffix}`;
 
     // Create product entity
-    const product = em.create(Product, {
-      ...input,
-      category,
-      subcategory,
-      company,
-      slug: finalSlug,
-      averageRating: 0,
-      soldCount: 0,
-      reviewCount: 0,
-      wishlistCount: 0,
-      variations: [],
-      images: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      status: ProductStatus.ACTIVE,
-    });
+    // Create product entity
+const product = em.create(Product, {
+  ...input,
+  ...(category && { category }),
+  ...(subcategory && { subcategory }),
+  customCategory: input.customCategory || null,
+  customSubcategory: input.customSubcategory || null,
+  company,
+  slug: finalSlug,
+  averageRating: 0,
+  soldCount: 0,
+  reviewCount: 0,
+  wishlistCount: 0,
+  variations: [],
+  images: [],
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  status: ProductStatus.ACTIVE,
+});
+
 
     // Apply category discount
     const activeDiscounts = await em.find(Discount, {

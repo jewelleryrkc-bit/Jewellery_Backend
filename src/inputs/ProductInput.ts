@@ -16,10 +16,20 @@ export class ProductInput {
   @Field(() => Float)
   stock!: number;
 
-  
-  @Field(() => String, { nullable: true }) 
+  @Field(() => String, { nullable: true })
   subcategory?: string;
 
+   @Field({ nullable: true })
+  categoryId?: string;        // new (for clarity)
+
+  @Field({ nullable: true })
+  subcategoryId?: string; 
+  
+  @Field({ nullable: true })
+  customCategory?: string;
+
+  @Field({ nullable: true })
+  customSubcategory?: string;
 
   @Field()
   material!: string;

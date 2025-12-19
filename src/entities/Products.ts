@@ -94,16 +94,16 @@ export class Product {
   @ManyToOne(() => Category, { nullable: true })
   subcategory?: Category;
 
-@Field(() => [ProductVariation])  
-@OneToMany(() => ProductVariation, (variation) => variation.product, {
-  cascade: [Cascade.ALL, Cascade.REMOVE],
-  orphanRemoval: true,
-})
-variations = new Collection<ProductVariation>(this);
+  @Field(() => [ProductVariation])
+  @OneToMany(() => ProductVariation, (variation) => variation.product, {
+    cascade: [Cascade.ALL, Cascade.REMOVE],
+    orphanRemoval: true,
+  })
+  variations = new Collection<ProductVariation>(this);
 
-@Field({ nullable: true })
-@Property({ nullable: true })
-deletedMessage?: string;
+  @Field({ nullable: true })
+  @Property({ nullable: true })
+  deletedMessage?: string;
 
   @Field(() => Company)
   @ManyToOne(() => Company)
@@ -247,9 +247,8 @@ deletedMessage?: string;
   status: ProductStatus = ProductStatus.ACTIVE;
 
   @Field(() => Int)
-@Property({ type: "int", default: 0 })
-wishlistCount: number = 0;
-
+  @Property({ type: "int", default: 0 })
+  wishlistCount: number = 0;
 
   @BeforeCreate()
   generateSlug() {
@@ -267,18 +266,28 @@ wishlistCount: number = 0;
   updatedAt: Date = new Date();
 
   @Field(() => [ProductImage])
-  @OneToMany(() => ProductImage, (img) => img.product,{
+  @OneToMany(() => ProductImage, (img) => img.product, {
     eager: true,
-    cascade: [Cascade.ALL,Cascade.REMOVE] , 
-  orphanRemoval: true,  
+    cascade: [Cascade.ALL, Cascade.REMOVE],
+    orphanRemoval: true,
   })
   images = new Collection<ProductImage>(this);
 
-@Field({ nullable: true })
+  @Field({ nullable: true })
+  @Property({ nullable: true })
+  videoUrl?: string;
+
+  @Field({ nullable: true })
+  @Property({ nullable: true })
+  videoKey?: string;
+
+  @Field({ nullable: true })
 @Property({ nullable: true })
-videoUrl?: string;  
+customCategory?: string;
 
 @Field({ nullable: true })
 @Property({ nullable: true })
-videoKey?: string;
+customSubcategory?: string;
 }
+
+
