@@ -15,6 +15,8 @@ import { MyContext } from "../types";
 import { FieldError } from "../shared/ferror";
 import slugify from "slugify";
 import { CategoryImage } from "../entities/CategoryImage";
+import { Product, ProductStatus } from "../entities/Products";
+
 
 
 @InputType()
@@ -199,4 +201,64 @@ export class CategoryResolver {
      { populate: ["products", "products.images", "subcategories"] }
     );
   }
+
+@Mutation(() => Boolean)
+async deleteCategory(
+  @Arg("id") id: string,
+  @Ctx() { em }: MyContext
+): Promise<boolean> {
+  // 1) Load parent category with its subcategories
+  const category = await em.findOne(
+    Category,
+    { id },
+    { populate: ["subcategories"] }
+  );
+  if (!category) {
+    throw new Error("Category not found");
+  }
+
+  const subcategoryIds = category.subcategories
+    .getItems()
+    .map((sub) => sub.id);
+
+  // 2) Disable products in subcategories
+  if (subcategoryIds.length > 0) {
+    await em.nativeUpdate(
+      Product,
+      { category: { $in: subcategoryIds } },
+      { status: ProductStatus.DISABLED }
+    );
+  }
+
+  // 3) Disable products in parent category itself
+  await em.nativeUpdate(
+    Product,
+    { category: id },
+    { status: ProductStatus.DISABLED }
+  );
+
+  // 4) Optionally “hide” subcategories (if you don't want them selectable)
+  if (subcategoryIds.length > 0) {
+    await em.nativeUpdate(
+      Category,
+      { id: { $in: subcategoryIds } },
+      { slug: category.slug + "-deleted-" + Date.now() } // or add a boolean flag if you create one later
+    );
+  }
+
+  // 5) Optionally “hide” parent category
+  await em.nativeUpdate(
+    Category,
+    { id },
+    { slug: category.slug + "-deleted-" + Date.now() }
+  );
+
+  return true;
 }
+
+
+
+
+}
+
+

@@ -1,4 +1,4 @@
-import { Resolver, Mutation, Arg, Ctx, Query } from "type-graphql";
+import { Resolver, Mutation, Arg, Ctx, Query, Int } from "type-graphql";
 import { MyContext } from "../types";
 import { Order, OrderStatus } from "../entities/Order";
 import { OrderItem } from "../entities/OrderItem";
@@ -14,7 +14,8 @@ import { DiscountService } from "../services/DiscountService";
 import { MailService } from "../services/MailService";
 import { PayPalPayment, PayPalPaymentStatus } from "../entities/PaymentOrder";
 import { CheckoutPayload } from "../types/checkOut";
-import { CheckoutSession} from "../entities/CheckoutSession"
+import { CheckoutSession} from "../entities/CheckoutSession";
+import { SellerStats } from "../entities/SellerStats";
 // import slugify from "slugify";
 
 @Resolver(() => Order)
@@ -655,6 +656,55 @@ async completeCheckout(
   });
 }
 
+  // Seller stats for header strip (e.g. last 90 days)
+  @Query(() => SellerStats)
+  async sellerStats(
+    @Ctx() { em, req }: MyContext,
+    @Arg("days", () => Int, { defaultValue: 90 }) days: number
+  ): Promise<SellerStats> {
+    if (!req.session.companyId) {
+      throw new Error("Not authenticated as company");
+    }
+
+    const company = await em.findOne(Company, { id: req.session.companyId });
+    if (!company) {
+      throw new Error("Company not found");
+    }
+
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    // All orders containing at least one item from this company in the period
+    const orderItems = await em.find(
+      OrderItem,
+      {
+        product: { company },
+        order: { createdAt: { $gte: since } },
+      },
+      { populate: ["order", "product"] }
+    );
+
+    const ordersMap = new Map<string, Order>();
+    let salesAmount = 0;
+
+    for (const item of orderItems) {
+      const order = item.order;
+      ordersMap.set(order.id, order);
+      // revenue for this company only (price * quantity)
+      salesAmount += Number(item.price) * item.quantity;
+    }
+
+    const ordersCount = ordersMap.size;
+
+    // listingViews from Company entity (you can later make this per-period if needed)
+    const listingViews = company.profileViews || 0;
+
+    return {
+      listingViews,
+      salesAmount,
+      ordersCount,
+    };
+  }
 
 
 }
